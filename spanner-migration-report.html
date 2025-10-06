@@ -1,0 +1,1695 @@
+<html lang="en"><head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.13/html-to-image.min.js" integrity="sha512-iZ2ORl595Wx6miw+GuadDet4WQbdSWS3JLMoNfY8cRGoEFy6oT3G9IbcrBeL6AfkgpA51ETt/faX6yLV+/gFJg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+      (function() {
+        const originalConsole = window.console;
+        window.console = {
+          log: (...args) => {
+            originalConsole.log(...args);
+            window.parent.postMessage({ type: 'console', message: args.join(' ') }, '*');
+          },
+          error: (...args) => {
+            originalConsole.error(...args);
+            window.parent.postMessage({ type: 'console', message: 'Error: ' + args.join(' ') }, '*');
+          },
+          warn: (...args) => {
+            originalConsole.warn(...args);
+            window.parent.postMessage({ type: 'console', message: 'Warning: ' + args.join(' ') }, '*');
+          }
+        };
+
+        let requestId = 0;
+        let callbacksMap = new Map();
+        let streamControllers = new Map();
+        
+        window.claude = {
+          complete: (prompt) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'claudeComplete', id, prompt }, '*');
+            });
+          }
+        };
+
+        window.storage = {
+          get: (key, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'storageGet', id, key, shared }, '*');
+            });
+          },
+          set: (key, value, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'storageSet', id, key, value, shared }, '*');
+            });
+          },
+          delete: (key, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'storageDelete', id, key, shared }, '*');
+            });
+          },
+          list: (prefix, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = requestId++;
+              callbacksMap.set(id, { resolve, reject });
+              window.parent.postMessage({ type: 'storageList', id, prefix, shared }, '*');
+            });
+          }
+        };
+
+        let pendingBlobs = new Map();
+        URL.createObjectURL = (blob) => {
+          // Store the blob and create an ID and URL for it
+          const blobId = `blob-${Date.now()}-${Math.random()}`;
+          pendingBlobs.set(blobId, blob);
+          return `blob-request://${blobId}`;
+        };
+
+        URL.revokeObjectURL = (url) => {
+          // Remove the blob from our store
+          const blobId = url.replace("blob-request://", "");
+          pendingBlobs.delete(blobId);
+        };
+
+        const getBlobFromURL = (url) => {
+          const blobId = url.replace("blob-request://", "");
+          return pendingBlobs.get(blobId);
+        };
+
+        // Override global fetch with streaming support
+        window.fetch = (url, init = {}) => {
+          return new Promise((resolve, reject) => {
+            const id = requestId++;
+            const channelId = `fetch-${id}-${Date.now()}`;
+            
+            callbacksMap.set(id, { 
+              resolve: (response) => {
+                // Create a ReadableStream for the response body
+                const stream = new ReadableStream({
+                  start(controller) {
+                    streamControllers.set(channelId, controller);
+                  },
+                  cancel() {
+                    streamControllers.delete(channelId);
+                  }
+                });
+                
+                // Create and return the Response with the stream
+                resolve(new Response(stream, {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: response.headers
+                }));
+              },
+              reject,
+              channelId
+            });
+            
+            window.parent.postMessage({
+              type: 'proxyFetch',
+              id,
+              url,
+              init,
+              channelId
+            }, '*');
+          });
+        };
+
+        window.addEventListener('message', async (event) => {
+          if (event.data.type === 'takeScreenshot') {
+            const rootElement = document.getElementById('artifacts-component-root-html');
+            if (!rootElement) {
+              window.parent.postMessage({
+                type: 'screenshotError',
+                error: new Error('Root element not found'),
+              }, '*');
+            }
+            const screenshot = await htmlToImage.toPng(rootElement, {
+              imagePlaceholder:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdjePDgwX8ACOQDoNsk0PMAAAAASUVORK5CYII=",
+            });
+            window.parent.postMessage({
+              type: 'screenshotData',
+              data: screenshot,
+            }, '*');
+          } else if (event.data.type === 'claudeComplete') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.completion);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'proxyFetchResponse') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+              callbacksMap.delete(event.data.id);
+            } else {
+              // Initial response with headers, status, etc.
+              callback.resolve({
+                status: event.data.status,
+                statusText: event.data.statusText,
+                headers: event.data.headers
+              });
+              // Don't delete the callback yet if streaming
+              if (!event.data.body) {
+                callbacksMap.delete(event.data.id);
+              }
+            }
+          } else if (event.data.type === 'proxyFetchStream') {
+            // Handle streaming data chunks
+            const controller = streamControllers.get(event.data.channelId);
+            if (controller) {
+              if (event.data.error) {
+                controller.error(new Error(event.data.error));
+                streamControllers.delete(event.data.channelId);
+              } else if (event.data.done) {
+                controller.close();
+                streamControllers.delete(event.data.channelId);
+                // Clean up the callback
+                const callback = Array.from(callbacksMap.entries()).find(
+                  ([_, value]) => value.channelId === event.data.channelId
+                );
+                if (callback) {
+                  callbacksMap.delete(callback[0]);
+                }
+              } else if (event.data.chunk) {
+                controller.enqueue(new Uint8Array(event.data.chunk));
+              }
+            }
+          } else if (event.data.type === 'storageGet') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageSet') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageDelete') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageList') {
+            const callback = callbacksMap.get(event.data.id);
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          }
+        });
+
+        window.addEventListener('click', (event) => {
+          const isEl = event.target instanceof HTMLElement;
+          if (!isEl) return;
+    
+          // find ancestor links
+          const linkEl = event.target.closest("a");
+          if (!linkEl || !linkEl.href) return;
+    
+          event.preventDefault();
+          event.stopImmediatePropagation();
+    
+          if (linkEl.href.startsWith("blob-request:")) {
+            const blob = getBlobFromURL(linkEl.href);
+            if (!blob) return;
+            void blob.arrayBuffer().then((data) => {
+              window.parent.postMessage({
+                type: "downloadFile",
+                filename: linkEl.download,
+                data,
+                mimeType: blob.type || "application/octet-stream",
+              });
+            });
+          } else if (linkEl.href.startsWith("data:")) {
+            const [header, base64Data] = linkEl.href.split(",");
+            const mimeMatch = header.match(/data:([^;]+)/);
+            const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+            const binaryString = atob(base64Data);
+            const data = Uint8Array.from(binaryString, (c) =>
+              c.charCodeAt(0),
+            ).buffer;
+            window.parent.postMessage({
+              type: "downloadFile",
+              filename: linkEl.download,
+              data,
+              mimeType,
+            });
+          } else {
+            let linkUrl;
+            try {
+              linkUrl = new URL(linkEl.href);
+            } catch (error) {
+              return;
+            }
+    
+            if (linkUrl.hostname === window.location.hostname) return;
+      
+            window.parent.postMessage({
+              type: 'openExternal',
+              href: linkEl.href,
+            }, '*');
+          }
+      });
+
+        const originalOpen = window.open;
+        window.open = function (url) {
+          window.parent.postMessage({
+            type: "openExternal",
+            href: url,
+          }, "*");
+        };
+
+        window.addEventListener('error', (event) => {
+          window.parent.postMessage({ type: 'console', message: 'Uncaught Error: ' + event.message }, '*');
+        });
+      })();
+    </script>
+  
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTGO to Google Cloud Spanner - Migration Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .page {
+            background: white;
+            width: 210mm;
+            min-height: 297mm;
+            margin: 20px auto;
+            padding: 25mm;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            page-break-after: always;
+        }
+        
+        @media print {
+            body { background: white; margin: 0; }
+            .page { margin: 0; box-shadow: none; page-break-after: always; }
+            .no-print { display: none; }
+        }
+        
+        /* Cover Page */
+        .cover {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            min-height: 250mm;
+        }
+        
+        .cover h1 {
+            font-size: 42px;
+            color: #1a73e8;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .cover h2 {
+            font-size: 28px;
+            color: #5f6368;
+            margin-bottom: 60px;
+            font-weight: 400;
+        }
+        
+        .cover-badge {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50px;
+            font-size: 20px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        
+        .cover-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin-top: 60px;
+            width: 100%;
+        }
+        
+        .stat-box {
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #1a73e8;
+        }
+        
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1a73e8;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #5f6368;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* Headers */
+        h1 {
+            color: #1a73e8;
+            font-size: 32px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #202124;
+            font-size: 24px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        h3 {
+            color: #5f6368;
+            font-size: 18px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        /* Complexity Badges */
+        .complexity-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .high { background: #fce8e6; color: #c5221f; }
+        .medium { background: #fef7e0; color: #e37400; }
+        .low { background: #e6f4ea; color: #137333; }
+        
+        /* Progress Bars */
+        .progress-container {
+            margin: 25px 0;
+        }
+        
+        .progress-item {
+            margin-bottom: 20px;
+        }
+        
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .progress-bar {
+            height: 24px;
+            background: #e8eaed;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #1a73e8 0%, #4285f4 100%);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 12px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            transition: width 1s ease;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+        
+        thead {
+            background: #1a73e8;
+            color: white;
+        }
+        
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e8eaed;
+        }
+        
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border: 1px solid #e8eaed;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .card-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: #202124;
+            margin-bottom: 12px;
+        }
+        
+        /* Risk Matrix */
+        .risk-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .risk-item {
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .risk-high {
+            background: #fce8e6;
+            border-color: #c5221f;
+        }
+        
+        .risk-medium {
+            background: #fef7e0;
+            border-color: #e37400;
+        }
+        
+        .risk-low {
+            background: #e6f4ea;
+            border-color: #137333;
+        }
+        
+        .risk-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .risk-desc {
+            font-size: 12px;
+            color: #5f6368;
+        }
+        
+        /* Chart */
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .bar-label {
+            width: 200px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .bar {
+            flex: 1;
+            height: 30px;
+            background: #e8eaed;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .bar-value {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            padding-left: 12px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .bar-high { background: linear-gradient(90deg, #ea4335 0%, #ff6b6b 100%); }
+        .bar-medium { background: linear-gradient(90deg, #fbbc04 0%, #ffd93d 100%); }
+        .bar-low { background: linear-gradient(90deg, #34a853 0%, #5ed573 100%); }
+        
+        /* Callouts */
+        .callout {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid;
+        }
+        
+        .callout-success {
+            background: #e6f4ea;
+            border-color: #137333;
+        }
+        
+        .callout-warning {
+            background: #fef7e0;
+            border-color: #e37400;
+        }
+        
+        .callout-info {
+            background: #e8f0fe;
+            border-color: #1a73e8;
+        }
+        
+        .callout-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        /* Footer */
+        .page-footer {
+            position: absolute;
+            bottom: 20mm;
+            left: 25mm;
+            right: 25mm;
+            text-align: center;
+            font-size: 11px;
+            color: #5f6368;
+            padding-top: 15px;
+            border-top: 1px solid #e8eaed;
+        }
+        
+        /* Print Button */
+        .no-print {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(26,115,232,0.3);
+            z-index: 1000;
+        }
+        
+        .no-print:hover {
+            background: #1557b0;
+        }
+        
+        ul {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .service-table td:first-child {
+            font-weight: 600;
+        }
+        
+        code {
+            background: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body id="artifacts-component-root-html">
+    <div class="no-print" style="position: fixed; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 1000;">
+        <button onclick="window.print()" style="padding: 12px 24px; background: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(26,115,232,0.3);">
+            🖨️ Print to PDF
+        </button>
+        <button onclick="saveAsHTML()" style="padding: 12px 24px; background: #34a853; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(52,168,83,0.3);">
+            💾 Save as HTML
+        </button>
+    </div>
+    
+    <script>
+        function saveAsHTML() {
+            const htmlContent = document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'FTGO-Spanner-Migration-Report.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+    
+    <!-- Cover Page -->
+    <div class="page cover">
+        <h1>FTGO Application Migration</h1>
+        <h2>Google Cloud Spanner Compatibility Report</h2>
+        <div class="cover-badge">Application-Level Code Changes</div>
+        
+        <div class="cover-stats">
+            <div class="stat-box">
+                <div class="stat-number">60-70%</div>
+                <div class="stat-label">Automation Potential</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">~300</div>
+                <div class="stat-label">Files Affected</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">7</div>
+                <div class="stat-label">Microservices</div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 80px; font-size: 14px; color: #5f6368;">
+            <p><strong>Version:</strong> 2.0</p>
+            <p><strong>Date:</strong> October 6, 2025</p>
+            <p><strong>Classification:</strong> Medium-High Complexity</p>
+        </div>
+    </div>
+    
+    <!-- Executive Summary -->
+    <div class="page">
+        <h1>Executive Overview</h1>
+        
+        <div class="callout callout-info">
+            <div class="callout-title">Migration Focus</div>
+            <p>This report analyzes application-level code changes required to migrate the FTGO microservices application from MySQL to Google Cloud Spanner.</p>
+        </div>
+        
+        <h2>Overall Assessment</h2>
+        <div class="progress-container">
+            <div class="progress-item">
+                <div class="progress-label">
+                    <span>Overall Complexity</span>
+                    <span>MEDIUM-HIGH</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 70%;">70%</div>
+                </div>
+            </div>
+            
+            <div class="progress-item">
+                <div class="progress-label">
+                    <span>Automation Potential</span>
+                    <span>60-70%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 65%;">65%</div>
+                </div>
+            </div>
+            
+            <div class="progress-item">
+                <div class="progress-label">
+                    <span>Manual Review Required</span>
+                    <span>30-40%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 35%; background: linear-gradient(90deg, #fbbc04 0%, #ffd93d 100%);">35%</div>
+                </div>
+            </div>
+        </div>
+        
+        <h2>Change Distribution by Complexity</h2>
+        <div class="chart-container">
+            <div class="bar-chart">
+                <div class="bar-item">
+                    <div class="bar-label">High Complexity</div>
+                    <div class="bar">
+                        <div class="bar-value bar-high" style="width: 30%;">30%</div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <div class="bar-label">Medium Complexity</div>
+                    <div class="bar">
+                        <div class="bar-value bar-medium" style="width: 40%;">40%</div>
+                    </div>
+                </div>
+                <div class="bar-item">
+                    <div class="bar-label">Low Complexity</div>
+                    <div class="bar">
+                        <div class="bar-value bar-low" style="width: 30%;">30%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">✅ Good News</div>
+            <ul>
+                <li>FTGO already uses optimistic locking patterns</li>
+                <li>No pessimistic locks to remove</li>
+                <li>Saga pattern already implemented for distributed transactions</li>
+                <li>Clean service boundaries enable incremental migration</li>
+                <li>High automation potential reduces manual effort</li>
+            </ul>
+        </div>
+        
+        <div class="callout callout-warning">
+            <div class="callout-title">⚠️ Key Challenges</div>
+            <ul>
+                <li>Event schema evolution requires backward compatibility strategy</li>
+                <li>Saga state serialization changes need careful testing</li>
+                <li>API breaking changes (Long → String UUIDs)</li>
+                <li>Query pattern optimization for Spanner performance</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- High Complexity Changes -->
+    <div class="page">
+        <h1>High Complexity Changes <span class="complexity-badge high">30%</span></h1>
+        
+        <div class="card">
+            <div class="card-header">1. Event Schema Evolution <span class="complexity-badge medium">60% Automation</span></div>
+            <p><strong>What:</strong> Update event payloads to use String IDs instead of Long IDs</p>
+            <p><strong>Why Complex:</strong></p>
+            <ul>
+                <li>Events are contracts between services</li>
+                <li>Must support backward compatibility during transition</li>
+                <li>Affects all event publishers and subscribers</li>
+                <li>Requires dual-field strategy (both Long and String during migration)</li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for migration choreography and consumer coordination</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">2. Saga State Object Changes <span class="complexity-badge medium">70% Automation</span></div>
+            <p><strong>What:</strong> Update all saga orchestration state objects (CreateOrderSaga, CancelOrderSaga, ReviseOrderSaga)</p>
+            <p><strong>Why Complex:</strong></p>
+            <ul>
+                <li>Saga state is serialized and persisted</li>
+                <li>Changes affect distributed transaction flows</li>
+                <li>Compensation logic must handle both old and new ID formats</li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for saga orchestration testing and compensation verification</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">3. Accounting Service (Event Sourcing) <span class="complexity-badge high">50% Automation</span></div>
+            <p><strong>What:</strong> Update event-sourced Account aggregate</p>
+            <p><strong>Why Complex:</strong></p>
+            <ul>
+                <li>Event store has special schema requirements for Spanner</li>
+                <li>Event payloads contain account IDs that must change</li>
+                <li>Event replay must handle mixed ID formats</li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for event store schema design and event migration strategy</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">4. Transaction Boundary Review <span class="complexity-badge high">0% Automation</span></div>
+            <p><strong>What:</strong> Review all @Transactional methods for Spanner compatibility</p>
+            <p><strong>Why Complex:</strong></p>
+            <ul>
+                <li>Spanner has different transaction limits (20,000 mutations max)</li>
+                <li>Distributed transactions have higher latency</li>
+                <li>Some transaction patterns may need refactoring</li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for every transactional method</p>
+        </div>
+    </div>
+    
+    <!-- Medium Complexity Changes -->
+    <div class="page">
+        <h1>Medium Complexity Changes <span class="complexity-badge medium">40%</span></h1>
+        
+        <div class="card">
+            <div class="card-header">5. Primary Key Type Migration (Long → String UUID) <span class="complexity-badge low">90% Automation</span></div>
+            <p><strong>Scope:</strong> Entity classes, Service methods, Controller endpoints, DTOs, Repository interfaces</p>
+            <p><strong>Files Affected:</strong> ~150 files across all layers</p>
+            <p><strong>Manual Review:</strong> Required to verify foreign key references and serialization logic</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">6. Optimistic Locking Implementation <span class="complexity-badge low">95% Automation</span></div>
+            <p><strong>Entities Affected:</strong></p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Entity</th>
+                        <th>Status</th>
+                        <th>Action Required</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Order</td>
+                        <td>✅ Has @Version</td>
+                        <td>No changes needed</td>
+                    </tr>
+                    <tr>
+                        <td>Consumer</td>
+                        <td>❌ Missing @Version</td>
+                        <td>Add @Version field + retry logic</td>
+                    </tr>
+                    <tr>
+                        <td>Ticket</td>
+                        <td>❌ Missing @Version</td>
+                        <td>Add @Version field + retry logic</td>
+                    </tr>
+                    <tr>
+                        <td>Restaurant</td>
+                        <td>❌ Missing @Version</td>
+                        <td>Add @Version field + retry logic</td>
+                    </tr>
+                    <tr>
+                        <td>Delivery</td>
+                        <td>❌ Missing @Version</td>
+                        <td>Add @Version field + retry logic</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p><strong>Manual Review:</strong> Required for retry logic implementation and monitoring setup</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">7. Query Pattern Adjustments <span class="complexity-badge high">30% Automation</span></div>
+            <p><strong>Changes Needed:</strong></p>
+            <ul>
+                <li>Convert offset-based pagination to cursor-based</li>
+                <li>Add explicit indexes for common filters</li>
+                <li>Remove unbounded queries (add LIMIT clauses)</li>
+                <li>Change to read-only transactions where applicable</li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for query optimization and index design</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">8. API Contract Breaking Changes <span class="complexity-badge low">90% Automation</span></div>
+            <p><strong>Impact:</strong></p>
+            <ul>
+                <li>All ID fields change from Long to String</li>
+                <li>URLs change: <code>/orders/123</code> → <code>/orders/550e8400-e29b-41d4-a716-446655440000</code></li>
+                <li>JSON payloads change: <code>{"orderId": 123}</code> → <code>{"orderId": "550e8400-..."}</code></li>
+            </ul>
+            <p><strong>Manual Review:</strong> Required for versioning strategy and client coordination</p>
+        </div>
+    </div>
+    
+    <!-- Low Complexity Changes -->
+    <div class="page">
+        <h1>Low Complexity Changes <span class="complexity-badge low">30%</span></h1>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Type</th>
+                    <th>Files</th>
+                    <th>Automation</th>
+                    <th>Review</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Repository Interface Updates</td>
+                    <td>~10</td>
+                    <td>99%</td>
+                    <td>Minimal</td>
+                </tr>
+                <tr>
+                    <td>Add Timestamp Fields</td>
+                    <td>~15</td>
+                    <td>95%</td>
+                    <td>Minimal</td>
+                </tr>
+                <tr>
+                    <td>Comparison Operator Changes</td>
+                    <td>~100</td>
+                    <td>85%</td>
+                    <td>Null-safety</td>
+                </tr>
+                <tr>
+                    <td>Test Data Updates</td>
+                    <td>~80</td>
+                    <td>70%</td>
+                    <td>Test assertions</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Repository Interface Example</h2>
+        <div class="card">
+            <div class="card-header">Before</div>
+            <pre>public interface OrderRepository extends CrudRepository&lt;Order, Long&gt; {
+    Optional&lt;Order&gt; findById(Long id);
+}</pre>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">After</div>
+            <pre style="background: #e6f4ea;">public interface OrderRepository extends CrudRepository&lt;Order, String&gt; {
+    Optional&lt;Order&gt; findById(String id);
+}</pre>
+        </div>
+        
+        <h2>Comparison Operator Example</h2>
+        <div class="card">
+            <div class="card-header">Before</div>
+            <pre>if (order.getId() == existingId) {
+    // handle duplicate
+}</pre>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">After</div>
+            <pre style="background: #e6f4ea;">if (order.getId().equals(existingId)) {
+    // handle duplicate
+}</pre>
+        </div>
+    </div>
+    
+    <!-- Automation Strategy -->
+    <div class="page">
+        <h1>Automation Confidence Levels</h1>
+        
+        <h2>✅ 95-100% Confidence (Safe to Automate)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Type</th>
+                    <th>Files Affected</th>
+                    <th>Why High Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Add @Version fields</td>
+                    <td>~4 entities</td>
+                    <td>Simple field addition, well-defined pattern</td>
+                </tr>
+                <tr>
+                    <td>Repository interface updates</td>
+                    <td>~10 repositories</td>
+                    <td>Generic type change, compile-time verified</td>
+                </tr>
+                <tr>
+                    <td>Add timestamp fields</td>
+                    <td>~15 entities</td>
+                    <td>Template-based, consistent pattern</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>⚠️ 80-94% Confidence (Automate with Review)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Type</th>
+                    <th>Files Affected</th>
+                    <th>Why Review Needed</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Entity ID type changes</td>
+                    <td>~15 entities</td>
+                    <td>Verify embedded objects, collections</td>
+                </tr>
+                <tr>
+                    <td>Service parameter types</td>
+                    <td>~60 methods</td>
+                    <td>May have business logic dependencies</td>
+                </tr>
+                <tr>
+                    <td>Controller parameter types</td>
+                    <td>~25 endpoints</td>
+                    <td>API compatibility concerns</td>
+                </tr>
+                <tr>
+                    <td>DTO/API contract updates</td>
+                    <td>~30 classes</td>
+                    <td>Serialization/deserialization verification</td>
+                </tr>
+                <tr>
+                    <td>Comparison operator changes</td>
+                    <td>~100 occurrences</td>
+                    <td>Null-safety edge cases</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>⚠️⚠️ 60-79% Confidence (Partial Automation)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Type</th>
+                    <th>Files Affected</th>
+                    <th>Why Risky</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Saga state objects</td>
+                    <td>3 sagas</td>
+                    <td>Serialization format, state machine logic</td>
+                </tr>
+                <tr>
+                    <td>Event schema updates</td>
+                    <td>~15 event classes</td>
+                    <td>Backward compatibility requirements</td>
+                </tr>
+                <tr>
+                    <td>Test data updates</td>
+                    <td>~80 test classes</td>
+                    <td>Varied test patterns, assertion logic</td>
+                </tr>
+                <tr>
+                    <td>Query method signatures</td>
+                    <td>~20 methods</td>
+                    <td>Custom query logic varies</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>🚫 0-59% Confidence (Mostly Manual)</h2>
+        <div class="risk-grid">
+            <div class="risk-item risk-high">
+                <div class="risk-title">Transaction Review</div>
+                <div class="risk-desc">Requires business logic understanding and performance analysis</div>
+            </div>
+            <div class="risk-item risk-high">
+                <div class="risk-title">Query Optimization</div>
+                <div class="risk-desc">Context-specific performance tuning needed</div>
+            </div>
+            <div class="risk-item risk-high">
+                <div class="risk-title">Event Migration</div>
+                <div class="risk-desc">Backward compatibility design required</div>
+            </div>
+            <div class="risk-item risk-high">
+                <div class="risk-title">Retry Logic</div>
+                <div class="risk-desc">Concurrency and error handling logic</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Service-by-Service Analysis -->
+    <div class="page">
+        <h1>Service-by-Service Analysis</h1>
+        
+        <table class="service-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Complexity</th>
+                    <th>Key Changes</th>
+                    <th>Automation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>ftgo-consumer-service</td>
+                    <td><span class="complexity-badge low">LOW</span></td>
+                    <td>Add @Version, ID type change</td>
+                    <td>75%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-restaurant-service</td>
+                    <td><span class="complexity-badge low">LOW-MEDIUM</span></td>
+                    <td>Add @Version, ID type, event publishing</td>
+                    <td>70%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-kitchen-service</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>Add @Version, ID type, saga participation</td>
+                    <td>65%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-delivery-service</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>Add @Version, ID type, event consumption</td>
+                    <td>65%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-order-service</td>
+                    <td><span class="complexity-badge high">HIGH</span></td>
+                    <td>ID type, saga orchestration, API changes</td>
+                    <td>60%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-accounting-service</td>
+                    <td><span class="complexity-badge high">HIGH</span></td>
+                    <td>ID type, event sourcing, event store</td>
+                    <td>50%</td>
+                </tr>
+                <tr>
+                    <td>ftgo-order-history-service</td>
+                    <td><span class="complexity-badge low">LOW</span></td>
+                    <td>ID type in event handlers</td>
+                    <td>70%</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Change Categories by Layer</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Layer</th>
+                    <th>Changes</th>
+                    <th>Complexity</th>
+                    <th>Automation</th>
+                    <th>Files</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Entity Layer</td>
+                    <td>ID type, @Version, timestamps</td>
+                    <td><span class="complexity-badge low">LOW</span></td>
+                    <td>90%</td>
+                    <td>~15</td>
+                </tr>
+                <tr>
+                    <td>Repository Layer</td>
+                    <td>Generic type parameters</td>
+                    <td><span class="complexity-badge low">LOW</span></td>
+                    <td>99%</td>
+                    <td>~10</td>
+                </tr>
+                <tr>
+                    <td>Service Layer</td>
+                    <td>Method signatures, transactions, retry logic</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>70%</td>
+                    <td>~60</td>
+                </tr>
+                <tr>
+                    <td>Controller Layer</td>
+                    <td>Path variables, request/response DTOs</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>85%</td>
+                    <td>~25</td>
+                </tr>
+                <tr>
+                    <td>Messaging Layer</td>
+                    <td>Event schemas, saga states, handlers</td>
+                    <td><span class="complexity-badge high">HIGH</span></td>
+                    <td>60%</td>
+                    <td>~28</td>
+                </tr>
+                <tr>
+                    <td>API Contracts</td>
+                    <td>DTOs, request/response objects</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>90%</td>
+                    <td>~30</td>
+                </tr>
+                <tr>
+                    <td>Test Layer</td>
+                    <td>Test data, assertions, mocks</td>
+                    <td><span class="complexity-badge medium">MEDIUM</span></td>
+                    <td>70%</td>
+                    <td>~80</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Technical Challenges -->
+    <div class="page">
+        <h1>Key Technical Challenges</h1>
+        
+        <div class="card">
+            <div class="card-header">Challenge 1: Distributed ID Management</div>
+            <p><strong>Problem:</strong> Sequential Long IDs → Random UUID Strings</p>
+            <p><strong>Impact:</strong></p>
+            <ul>
+                <li>ID generation changes from database-managed to application-managed</li>
+                <li>No natural ordering (unless using timestamp-based UUIDs)</li>
+                <li>Larger storage footprint (16 bytes vs 8 bytes)</li>
+            </ul>
+            <p><strong>Solution:</strong></p>
+            <ul>
+                <li>Use UUID.randomUUID() for ID generation</li>
+                <li>Add createdAt timestamp for ordering needs</li>
+                <li>Accept storage trade-off for distributed scalability</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Challenge 2: Pessimistic to Optimistic Locking</div>
+            <p><strong>Current State:</strong></p>
+            <ul>
+                <li>✅ No pessimistic locks found in codebase</li>
+                <li>✅ Order already uses @Version for optimistic locking</li>
+                <li>❌ Other entities lack @Version</li>
+            </ul>
+            <p><strong>Required Changes:</strong></p>
+            <ul>
+                <li>Add @Version to Consumer, Ticket, Restaurant, Delivery</li>
+                <li>Implement retry logic for OptimisticLockException</li>
+                <li>Add monitoring for lock contention</li>
+            </ul>
+            <p><strong>Risk:</strong> Low (codebase already follows optimistic pattern)</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Challenge 3: Transaction Semantics</div>
+            <p><strong>Spanner Differences:</strong></p>
+            <ul>
+                <li>Max 20,000 mutations per transaction (vs unlimited in MySQL)</li>
+                <li>Higher latency for distributed transactions</li>
+                <li>Different isolation levels</li>
+            </ul>
+            <p><strong>Required Changes:</strong></p>
+            <ul>
+                <li>Review all @Transactional methods</li>
+                <li>Identify large batch operations</li>
+                <li>Consider saga pattern for cross-service transactions (already used ✓)</li>
+            </ul>
+            <p><strong>Risk:</strong> Low (FTGO already uses sagas for distributed transactions)</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Challenge 4: Query Pattern Migration</div>
+            <p><strong>Anti-Patterns for Spanner:</strong></p>
+            <ul>
+                <li>Offset-based pagination: <code>OFFSET 1000 LIMIT 20</code> (scans 1000 rows)</li>
+                <li>Non-indexed filters: Full table scans</li>
+                <li>Unbounded queries: No LIMIT clause</li>
+            </ul>
+            <p><strong>Required Changes:</strong></p>
+            <ul>
+                <li>Cursor-based pagination: <code>WHERE created_at &lt; :cursor LIMIT 20</code></li>
+                <li>Explicit indexes for all filter columns</li>
+                <li>Add LIMIT to all list queries</li>
+            </ul>
+            <p><strong>Risk:</strong> Medium (requires query pattern analysis)</p>
+        </div>
+    </div>
+    
+    <!-- Automation Strategy -->
+    <div class="page">
+        <h1>Automation Strategy &amp; Tooling</h1>
+        
+        <h2>Recommended Tooling</h2>
+        
+        <div class="card">
+            <div class="card-header">Primary: OpenRewrite (Java AST Refactoring)</div>
+            <p><strong>Use For:</strong> Entity changes, repository updates, service signatures</p>
+            <p><strong>Confidence:</strong> 85-95%</p>
+            <p><strong>Setup:</strong> Create custom recipes for ID type migration</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Secondary: Custom LLM-Based Transformer</div>
+            <p><strong>Use For:</strong> DTO updates, test data, comparison operators</p>
+            <p><strong>Confidence:</strong> 75-85%</p>
+            <p><strong>Setup:</strong> Prompt engineering for context-aware changes</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Tertiary: Regex-Based Scripts</div>
+            <p><strong>Use For:</strong> Simple pattern replacements</p>
+            <p><strong>Confidence:</strong> 60-70%</p>
+            <p><strong>Setup:</strong> Quick wins for well-defined patterns</p>
+        </div>
+        
+        <h2>Automation Workflow</h2>
+        
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #1a73e8;">
+            <p><strong>Step 1: Run AST Transformations</strong></p>
+            <ul>
+                <li>Entity ID type changes</li>
+                <li>Add @Version fields</li>
+                <li>Add timestamp fields</li>
+                <li>Repository generic types</li>
+            </ul>
+            
+            <p style="margin-top: 15px;"><strong>Step 2: Run Type Propagation</strong></p>
+            <ul>
+                <li>Service method signatures</li>
+                <li>Controller parameters</li>
+                <li>DTO fields</li>
+            </ul>
+            
+            <p style="margin-top: 15px;"><strong>Step 3: Run Pattern Replacements</strong></p>
+            <ul>
+                <li>Comparison operators (== → .equals())</li>
+                <li>Test data generation</li>
+            </ul>
+            
+            <p style="margin-top: 15px;"><strong>Step 4: Manual Refinements</strong></p>
+            <ul>
+                <li>Event dual-field strategy</li>
+                <li>Retry logic</li>
+                <li>Transaction review</li>
+                <li>Query optimization</li>
+            </ul>
+            
+            <p style="margin-top: 15px;"><strong>Step 5: Testing</strong></p>
+            <ul>
+                <li>Unit tests</li>
+                <li>Integration tests</li>
+                <li>Saga tests</li>
+                <li>API compatibility tests</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Risk Matrix -->
+    <div class="page">
+        <h1>Risk Matrix</h1>
+        
+        <h2>High Risk (Require Expert Review)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Risk</th>
+                    <th>Impact if Missed</th>
+                    <th>Mitigation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Event schema incompatibility</td>
+                    <td>Consumer failures, message processing errors</td>
+                    <td>Dual-field strategy, extensive testing</td>
+                </tr>
+                <tr>
+                    <td>Breaking API changes</td>
+                    <td>Client application failures</td>
+                    <td>Versioning, coordinated deployment</td>
+                </tr>
+                <tr>
+                    <td>Saga state serialization</td>
+                    <td>Distributed transaction failures</td>
+                    <td>Saga flow testing, rollback testing</td>
+                </tr>
+                <tr>
+                    <td>Optimistic lock storms</td>
+                    <td>Service degradation</td>
+                    <td>Retry monitoring, backoff tuning</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Medium Risk (Code Review Required)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Risk</th>
+                    <th>Impact if Missed</th>
+                    <th>Mitigation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Missed ID type conversions</td>
+                    <td>Type errors at runtime</td>
+                    <td>Comprehensive code review</td>
+                </tr>
+                <tr>
+                    <td>Foreign key mismatches</td>
+                    <td>Join failures</td>
+                    <td>Referential integrity checks</td>
+                </tr>
+                <tr>
+                    <td>Null-safety issues</td>
+                    <td>NullPointerExceptions</td>
+                    <td>.equals() null checks</td>
+                </tr>
+                <tr>
+                    <td>Query performance</td>
+                    <td>Slow queries</td>
+                    <td>Query analysis, indexing</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Low Risk (Automation Safe)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Risk</th>
+                    <th>Impact if Missed</th>
+                    <th>Mitigation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Repository interface types</td>
+                    <td>Compilation errors</td>
+                    <td>Compile-time verification</td>
+                </tr>
+                <tr>
+                    <td>Timestamp field missing</td>
+                    <td>Query limitations</td>
+                    <td>Simple validation script</td>
+                </tr>
+                <tr>
+                    <td>Test data format</td>
+                    <td>Test failures</td>
+                    <td>Iterative test fixing</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Code Changes Breakdown -->
+    <div class="page">
+        <h1>Application Changes Breakdown</h1>
+        
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.8;">
+            <div style="text-align: center; margin-bottom: 20px; font-weight: bold; font-size: 16px;">
+                Application Code Changes Distribution
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <strong>Total Code Changes: 100%</strong>
+            </div>
+            
+            <div style="margin-left: 20px;">
+                <div style="margin: 15px 0;">
+                    <span style="color: #c5221f;">■</span> <strong>High Complexity (30%)</strong><br>
+                    <div style="margin-left: 30px;">
+                        ├── Event schema evolution: 10%<br>
+                        ├── Saga state changes: 8%<br>
+                        ├── Event sourcing (accounting): 7%<br>
+                        └── Transaction review: 5%
+                    </div>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <span style="color: #e37400;">■</span> <strong>Medium Complexity (40%)</strong><br>
+                    <div style="margin-left: 30px;">
+                        ├── ID type migration: 15%<br>
+                        ├── Optimistic locking: 8%<br>
+                        ├── Query patterns: 7%<br>
+                        └── API contracts: 10%
+                    </div>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <span style="color: #137333;">■</span> <strong>Low Complexity (30%)</strong><br>
+                    <div style="margin-left: 30px;">
+                        ├── Repository updates: 5%<br>
+                        ├── Timestamp fields: 5%<br>
+                        ├── Comparison operators: 8%<br>
+                        └── Test data: 12%
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dadce0;">
+                <strong>Automation Coverage:</strong><br>
+                <div style="margin-left: 20px; margin-top: 10px;">
+                    ├── Fully Automated (30%): Repository, timestamps, basic types<br>
+                    ├── Automated + Review (35%): Entities, services, controllers, DTOs<br>
+                    ├── Partially Automated (20%): Sagas, events, tests<br>
+                    └── Manual Required (15%): Transactions, retry logic, optimization
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Spanner-Friendly Patterns -->
+    <div class="page">
+        <h1>✅ Good News: Existing Spanner-Friendly Patterns</h1>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">1. Optimistic Locking Already Present</div>
+            <ul>
+                <li>Order entity has @Version field</li>
+                <li>No pessimistic locks (@Lock) found</li>
+                <li>State machines used instead (Ticket)</li>
+            </ul>
+        </div>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">2. Saga Pattern for Distributed Transactions</div>
+            <ul>
+                <li>Already uses Eventuate Tram Sagas</li>
+                <li>No distributed two-phase commit</li>
+                <li>Compensation logic already implemented</li>
+            </ul>
+        </div>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">3. Database-per-Service</div>
+            <ul>
+                <li>Clean service boundaries</li>
+                <li>No cross-database joins</li>
+                <li>Independent migration possible</li>
+            </ul>
+        </div>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">4. Denormalized Data</div>
+            <ul>
+                <li>Restaurant data replicated where needed</li>
+                <li>Avoids cross-service joins</li>
+                <li>Spanner-friendly pattern</li>
+            </ul>
+        </div>
+        
+        <div class="callout callout-success">
+            <div class="callout-title">5. Event-Driven Architecture</div>
+            <ul>
+                <li>Already uses async messaging</li>
+                <li>Service decoupling via events</li>
+                <li>Good fit for distributed database</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Final Recommendation -->
+    <div class="page">
+        <h1>Final Recommendation</h1>
+        
+        <div style="text-align: center; margin: 40px 0;">
+            <div class="cover-badge" style="background: linear-gradient(135deg, #34a853 0%, #5ed573 100%); font-size: 24px;">
+                ✅ MIGRATION FEASIBLE
+            </div>
+        </div>
+        
+        <h2>Strengths</h2>
+        <div class="callout callout-success">
+            <ul>
+                <li>✅ High automation potential (60-70%)</li>
+                <li>✅ Already uses optimistic locking patterns</li>
+                <li>✅ No pessimistic locks to remove</li>
+                <li>✅ Saga pattern already implemented</li>
+                <li>✅ Clean service boundaries</li>
+            </ul>
+        </div>
+        
+        <h2>Challenges</h2>
+        <div class="callout callout-warning">
+            <ul>
+                <li>🔴 Event schema evolution (backward compatibility)</li>
+                <li>🔴 Saga state serialization changes</li>
+                <li>🟡 API breaking changes (ID format)</li>
+                <li>🟡 Query pattern optimization</li>
+            </ul>
+        </div>
+        
+        <h2>Critical Success Factors</h2>
+        <ol style="margin: 20px 0; padding-left: 25px;">
+            <li>Expert code review for automated changes</li>
+            <li>Comprehensive saga testing</li>
+            <li>Event backward compatibility strategy</li>
+            <li>API versioning or coordinated deployment</li>
+            <li>Thorough integration testing</li>
+        </ol>
+        
+        <h2>Recommended Approach</h2>
+        <div class="card">
+            <ul>
+                <li>Automate 60-70% of code changes using OpenRewrite</li>
+                <li>Manual review all automated changes</li>
+                <li>Pilot on low-complexity service first (ftgo-restaurant-service)</li>
+                <li>Incremental migration service-by-service</li>
+                <li>Comprehensive testing at each stage</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 60px; padding: 20px; background: #e8f0fe; border-radius: 8px; border-left: 4px solid #1a73e8;">
+            <p style="margin: 0; font-style: italic; color: #5f6368;">
+                <strong>Document Focus:</strong> Application Code Changes Only<br>
+                <strong>Excludes:</strong> Database schema design, data migration, infrastructure setup<br>
+                <strong>Version:</strong> 2.0<br>
+                <strong>Last Updated:</strong> October 6, 2025
+            </p>
+        </div>
+        
+        <div class="page-footer">
+            FTGO to Google Cloud Spanner - Application Migration Summary | Confidential
+        </div>
+    </div>
+
+</body></html>

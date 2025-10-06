@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTGO Application - Dependency Mapping Report</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            background: #f8f9fa;
+        }
+        
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 20mm;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            page-break-after: always;
+        }
+        
+        .cover-page {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .cover-page h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .cover-page .subtitle {
+            font-size: 24px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        .cover-page .metadata {
+            margin-top: 60px;
+            padding: 30px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            width: 80%;
+        }
+        
+        .cover-page .metadata p {
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        
+        .header {
+            border-bottom: 4px solid #667eea;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            font-weight: 700;
+        }
+        
+        .header .page-number {
+            float: right;
+            color: #95a5a6;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 24px;
+            margin: 25px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e8eaf6;
+        }
+        
+        h3 {
+            color: #764ba2;
+            font-size: 18px;
+            margin: 20px 0 10px 0;
+        }
+        
+        h4 {
+            color: #5a67d8;
+            font-size: 16px;
+            margin: 15px 0 8px 0;
+        }
+        
+        p {
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+        
+        .diagram-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            overflow-x: auto;
+            border-radius: 5px;
+        }
+        
+        .info-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e8eaf6;
+        }
+        
+        tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        tbody tr:hover {
+            background: #e8eaf6;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        
+        .badge-high {
+            background: #fee;
+            color: #c53030;
+        }
+        
+        .badge-medium {
+            background: #fef5e7;
+            color: #d68910;
+        }
+        
+        .badge-low {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .badge-critical {
+            background: #1a202c;
+            color: white;
+        }
+        
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .service-card {
+            background: white;
+            border: 2px solid #e8eaf6;
+            border-radius: 8px;
+            padding: 15px;
+            transition: transform 0.2s;
+        }
+        
+        .service-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .service-card h4 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        .service-card ul {
+            margin-left: 20px;
+            font-size: 12px;
+        }
+        
+        .highlight-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .danger-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .checklist {
+            list-style: none;
+            margin-left: 0;
+        }
+        
+        .checklist li {
+            padding: 8px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .checklist li:before {
+            content: "☐";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-size: 20px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 2px solid #e8eaf6;
+            text-align: center;
+            color: #95a5a6;
+            font-size: 12px;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .page {
+                box-shadow: none;
+                margin: 0;
+            }
+        }
+        
+        .toc {
+            margin: 30px 0;
+        }
+        
+        .toc-item {
+            padding: 10px 0;
+            border-bottom: 1px dashed #e8eaf6;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .toc-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .flow-diagram {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .arrow {
+            color: #667eea;
+            font-size: 24px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Cover Page -->
+    <div class="page cover-page">
+        <h1>FTGO Application</h1>
+        <div class="subtitle">Dependency Mapping Report</div>
+        <div class="subtitle" style="font-size: 18px; opacity: 0.8;">Comprehensive Analysis for Change Impact & Risk Management</div>
+        
+        <div class="metadata">
+            <p><strong>Generated:</strong> October 6, 2025</p>
+            <p><strong>Version:</strong> Spring Boot 2.2.6 | Eventuate 2022.0</p>
+            <p><strong>Architecture:</strong> Microservices with Event-Driven SAGA Pattern</p>
+            <p><strong>Services:</strong> 9 Microservices | 7 Databases</p>
+        </div>
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="page">
+        <div class="header">
+            <h1>Table of Contents</h1>
+            <div class="page-number">Page 2</div>
+        </div>
+        
+        <div class="toc">
+            <div class="toc-item">
+                <span>1. Executive Summary</span>
+                <span>3</span>
+            </div>
+            <div class="toc-item">
+                <span>2. Service-to-Service Dependencies</span>
+                <span>4</span>
+            </div>
+            <div class="toc-item">
+                <span>3. Internal vs External Dependencies</span>
+                <span>7</span>
+            </div>
+            <div class="toc-item">
+                <span>4. Service-to-Database Dependencies</span>
+                <span>9</span>
+            </div>
+            <div class="toc-item">
+                <span>5. Database-to-Database Dependencies</span>
+                <span>11</span>
+            </div>
+            <div class="toc-item">
+                <span>6. Impact Analysis & Change Buckets</span>
+                <span>14</span>
+            </div>
+            <div class="toc-item">
+                <span>7. Service Dependency Matrix</span>
+                <span>18</span>
+            </div>
+            <div class="toc-item">
+                <span>8. Key Insights & Recommendations</span>
+                <span>19</span>
+            </div>
+            <div class="toc-item">
+                <span>9. Quick Reference Appendix</span>
+                <span>21</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="page">
+        <div class="header">
+            <h1>Executive Summary</h1>
+            <div class="page-number">Page 3</div>
+        </div>
+        
+        <div class="info-card">
+            <h3>Report Purpose</h3>
+            <p>This comprehensive dependency mapping report analyzes the FTGO microservices application across four critical dimensions to enable safe code changes, minimize deployment risks, and provide clear guidance for impact analysis.</p>
+        </div>
+
+        <h2>Four Dependency Dimensions</h2>
+        
+        <div class="service-grid">
+            <div class="service-card">
+                <h4>1. Service-to-Service</h4>
+                <ul>
+                    <li>Saga orchestration patterns</li>
+                    <li>REST & gRPC communications</li>
+                    <li>Event-driven messaging</li>
+                    <li>API gateway compositions</li>
+                </ul>
+            </div>
+            
+            <div class="service-card">
+                <h4>2. Internal vs External</h4>
+                <ul>
+                    <li>Shared module dependencies</li>
+                    <li>Framework versions (Spring, Eventuate)</li>
+                    <li>Library compatibility matrix</li>
+                    <li>Infrastructure components</li>
+                </ul>
+            </div>
+            
+            <div class="service-card">
+                <h4>3. Service-to-Database</h4>
+                <ul>
+                    <li>Database-per-service isolation</li>
+                    <li>MySQL schema ownership</li>
+                    <li>DynamoDB CQRS views</li>
+                    <li>Connection patterns</li>
+                </ul>
+            </div>
+            
+            <div class="service-card">
+                <h4>4. Database-to-Database</h4>
+                <ul>
+                    <li>CDC-based replication</li>
+                    <li>Event sourcing patterns</li>
+                    <li>Kafka message flows</li>
+                    <li>Eventual consistency models</li>
+                </ul>
+            </div>
+        </div>
+
+        <h2>System Architecture Overview</h2>
+        
+        <div class="diagram-box">
+┌─────────────────────────────────────────────────────────────┐
+│                   FTGO System Architecture                  │
+└─────────────────────────────────────────────────────────────┘
+
+External Clients
+       │
+       ├──[REST]──> API Gateway ──────┐
+       └──[GraphQL]─> GraphQL Gateway ─┤
+                                       │
+       ┌───────────────────────────────┘
+       │
+       ├──> Order Service (SAGA ORCHESTRATOR) ────┐
+       │         │                                 │
+       │         ├──[Commands]──> Consumer Service │
+       │         ├──[Commands]──> Kitchen Service  │
+       │         ├──[Commands]──> Accounting Service
+       │         └──[Commands]──> Restaurant Service
+       │
+       ├──> Delivery Service
+       ├──> Order History Service (CQRS View)
+       │
+       └──[Kafka Message Bus]──> CDC Service ──> MySQL/DynamoDB
+        </div>
+
+        <div class="highlight-box">
+            <strong>Key Insight:</strong> The Order Service acts as the central saga orchestrator, coordinating distributed transactions across Consumer, Kitchen, and Accounting services. Any changes to saga flows require coordinated deployment across all participants.
+        </div>
+    </div>
+
+    <!-- Service Dependencies -->
+    <div class="page">
+        <div class="header">
+            <h1>Service-to-Service Dependencies</h1>
+            <div class="page-number">Page 4</div>
+        </div>
+
+        <h2>Core Service Relationships</h2>
+
+        <div class="diagram-box">
+API Gateways (Entry Points)
+├── ftgo-api-gateway (REST)
+│   ├──[REST]──> ftgo-order-service
+│   ├──[REST]──> ftgo-kitchen-service
+│   ├──[REST]──> ftgo-delivery-service
+│   ├──[REST]──> ftgo-accounting-service
+│   └──[REST]──> ftgo-order-history-service
+│
+└── ftgo-api-gateway-graphql (GraphQL)
+    ├──[REST]──> ftgo-order-service
+    ├──[REST]──> ftgo-consumer-service
+    └──[REST]──> ftgo-restaurant-service
+
+Core Services (Orchestrators)
+└── ftgo-order-service (SAGA ORCHESTRATOR)
+    ├──[Saga Commands]──> ftgo-consumer-service
+    ├──[Saga Commands]──> ftgo-kitchen-service
+    ├──[Saga Commands]──> ftgo-accounting-service
+    └──[Saga Commands]──> ftgo-restaurant-service
+        </div>
+
+        <h2>Saga Orchestration Patterns</h2>
+
+        <h3>CreateOrderSaga Flow</h3>
+        <div class="flow-diagram">
+            <div><strong>1. Order Service</strong><br/>Create Order (APPROVAL_PENDING)</div>
+            <div class="arrow">↓</div>
+            <div><strong>2. Consumer Service</strong><br/>Validate Consumer Eligibility</div>
+            <div class="arrow">↓</div>
+            <div><strong>3. Kitchen Service</strong><br/>Create Ticket</div>
+            <div class="arrow">↓</div>
+            <div><strong>4. Accounting Service</strong><br/>Authorize Payment</div>
+            <div class="arrow">↓</div>
+            <div><strong>5. Kitchen Service</strong><br/>Confirm Ticket</div>
+            <div class="arrow">↓</div>
+            <div><strong>6. Order Service</strong><br/>Approve Order → APPROVED</div>
+        </div>
+
+        <div class="danger-box">
+            <strong>⚠️ Critical Dependency:</strong> Changes to saga flows require all participant services to be deployed in coordination. Failed deployments can leave orders in inconsistent states requiring manual intervention.
+        </div>
+    </div>
+
+    <!-- Service Details -->
+    <div class="page">
+        <div class="header">
+            <h1>Detailed Service Dependencies</h1>
+            <div class="page-number">Page 5</div>
+        </div>
+
+        <h2>ftgo-order-service (Central Orchestrator)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Role</strong></td>
+                    <td>Saga orchestrator for order workflows</td>
+                </tr>
+                <tr>
+                    <td><strong>Outbound Dependencies</strong></td>
+                    <td>Consumer, Kitchen, Accounting, Restaurant services</td>
+                </tr>
+                <tr>
+                    <td><strong>Communication</strong></td>
+                    <td>Saga commands, Domain events, gRPC API, REST API</td>
+                </tr>
+                <tr>
+                    <td><strong>Sagas Orchestrated</strong></td>
+                    <td>CreateOrderSaga, CancelOrderSaga, ReviseOrderSaga</td>
+                </tr>
+                <tr>
+                    <td><strong>Criticality</strong></td>
+                    <td><span class="badge badge-critical">CRITICAL</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Communication Pattern Summary</h2>
+        
+        <div class="service-grid">
+            <div class="service-card">
+                <h4>Synchronous (Request/Reply)</h4>
+                <p style="font-size: 11px; font-family: monospace;">
+                Client → API Gateway → Service → Response
+                </p>
+                <p style="font-size: 12px; margin-top: 10px;">Used for: Real-time queries, API gateway composition</p>
+            </div>
+            
+            <div class="service-card">
+                <h4>Asynchronous (Saga)</h4>
+                <p style="font-size: 11px; font-family: monospace;">
+                Order Service → Command → Participant<br/>
+                Participant → Reply → Order Service
+                </p>
+                <p style="font-size: 12px; margin-top: 10px;">Used for: Distributed transactions, saga orchestration</p>
+            </div>
+            
+            <div class="service-card">
+                <h4>Event-Driven (Pub/Sub)</h4>
+                <p style="font-size: 11px; font-family: monospace;">
+                Service A → Domain Event → Kafka<br/>
+                Kafka → Subscribers (B, C, D)
+                </p>
+                <p style="font-size: 12px; margin-top: 10px;">Used for: Data replication, CQRS views, notifications</p>
+            </div>
+            
+            <div class="service-card">
+                <h4>Change Data Capture</h4>
+                <p style="font-size: 11px; font-family: monospace;">
+                DB → Outbox Table → CDC Service<br/>
+                CDC Service → Kafka → Consumers
+                </p>
+                <p style="font-size: 12px; margin-top: 10px;">Used for: Transactional messaging, event sourcing</p>
+            </div>
+        </div>
+
+        <h2>Service Criticality Ranking</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Service</th>
+                    <th>Role</th>
+                    <th>Impact if Down</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>order-service</td>
+                    <td>Orchestrator</td>
+                    <td><span class="badge badge-critical">Cannot process orders</span></td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>consumer-service</td>
+                    <td>Saga participant</td>
+                    <td><span class="badge badge-high">Blocks order creation</span></td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>kitchen-service</td>
+                    <td>Saga participant</td>
+                    <td><span class="badge badge-high">Blocks order fulfillment</span></td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>accounting-service</td>
+                    <td>Saga participant</td>
+                    <td><span class="badge badge-high">Blocks payment authorization</span></td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>restaurant-service</td>
+                    <td>Master data</td>
+                    <td><span class="badge badge-medium">Degrades slowly via cache</span></td>
+                </tr>
+                <tr>
+                    <td>6</td>
+                    <td>delivery-service</td>
+                    <td>Post-order</td>
+                    <td><span class="badge badge-medium">Delivery tracking unavailable</span></td>
+                </tr>
+                <tr>
+                    <td>7</td>
+                    <td>order-history-service</td>
+                    <td>Query only</td>
+                    <td><span class="badge badge-low">Fallback to order-service API</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- External Dependencies -->
+    <div class="page">
+        <div class="header">
+            <h1>Internal vs External Dependencies</h1>
+            <div class="page-number">Page 7</div>
+        </div>
+
+        <h2>Core Framework Dependencies</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Library/Framework</th>
+                    <th>Version</th>
+                    <th>Used By</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Spring Boot</td>
+                    <td>2.2.6.RELEASE</td>
+                    <td>All Java services</td>
+                    <td>Core framework</td>
+                </tr>
+                <tr>
+                    <td>Spring Data JPA</td>
+                    <td>2.2.6.RELEASE</td>
+                    <td>Services with MySQL</td>
+                    <td>ORM</td>
+                </tr>
+                <tr>
+                    <td>Spring Cloud Gateway</td>
+                    <td>2.0.0.RELEASE</td>
+                    <td>ftgo-api-gateway</td>
+                    <td>Reactive API gateway</td>
+                </tr>
+                <tr>
+                    <td>Spring Cloud Sleuth</td>
+                    <td>2.2.2.RELEASE</td>
+                    <td>order, delivery, gateway</td>
+                    <td>Distributed tracing</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Eventuate Platform (Event-Driven Architecture)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Library</th>
+                    <th>Version</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>eventuate-platform</td>
+                    <td>2022.0.RELEASE</td>
+                    <td>Platform BOM (Bill of Materials)</td>
+                </tr>
+                <tr>
+                    <td>eventuate-common</td>
+                    <td>0.15.0.RELEASE</td>
+                    <td>Common utilities for event handling</td>
+                </tr>
+                <tr>
+                    <td>eventuate-tram-spring-jdbc-kafka</td>
+                    <td>Platform</td>
+                    <td>Transactional messaging with CDC</td>
+                </tr>
+                <tr>
+                    <td>eventuate-tram-sagas</td>
+                    <td>0.19.0.RELEASE</td>
+                    <td>Saga orchestration framework</td>
+                </tr>
+                <tr>
+                    <td>eventuate-client</td>
+                    <td>Platform</td>
+                    <td>Event sourcing for accounting service</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Shared Internal Modules</h2>
+        <div class="diagram-box">
+Service Dependencies Tree:
+
+ftgo-*-service/
+├── ftgo-common                      # Core domain objects
+│   ├── Money
+│   ├── Address
+│   └── Common utilities
+│
+├── ftgo-common-jpa                  # JPA configurations
+│   ├── Entity base classes
+│   └── JPA converters
+│
+├── common-swagger                   # Swagger/OpenAPI config
+│   └── Swagger customization
+│
+├── ftgo-*-service-api              # Service's published API
+│   ├── Commands (if saga participant)
+│   ├── Events
+│   └── DTOs
+│
+└── ftgo-*-service-api-spec         # JSON Schema specs
+    └── Message schemas for validation
+        </div>
+    </div>
+
+    <!-- Dependency Impact -->
+    <div class="page">
+        <div class="header">
+            <h1>Dependency Impact Matrix</h1>
+            <div class="page-number">Page 8</div>
+        </div>
+
+        <h2>Change Impact Assessment</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Type</th>
+                    <th>Internal Impact</th>
+                    <th>External Impact</th>
+                    <th>Risk</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Update Spring Boot version</td>
+                    <td>All Java services</td>
+                    <td>High compatibility risk</td>
+                    <td><span class="badge badge-high">HIGH</span></td>
+                </tr>
+                <tr>
+                    <td>Update Eventuate Platform</td>
+                    <td>All services</td>
+                    <td>Messaging protocol changes</td>
+                    <td><span class="badge badge-high">HIGH</span></td>
+                </tr>
+                <tr>
+                    <td>Update Kafka version</td>
+                    <td>All services</td>
+                    <td>Message broker compatibility</td>
+                    <td><span class="badge badge-high">HIGH</span></td>
+                </tr>
+                <tr>
+                    <td>Add field to API contract</td>
+                    <td>Consumers of that API</td>
+                    <td>None</td>
+                    <td><span class="badge badge-medium">MEDIUM</span></td>
+                </tr>
+                <tr>
+                    <td>Change saga flow</td>
+                    <td>order-service only</td>
+                    <td>Participant services</td>
+                    <td><span class="badge badge-high">HIGH</span></td>
+                </tr>
+                <tr>
+                    <td>Update service internal logic</td>
+                    <td>Single service</td>
+                    <td>None (if API stable)</td>
+                    <td><span class="badge badge-low">LOW</span></td>
+                </tr>
+                <tr>
+                    <td>Update shared module</td>
+                    <td>All dependent services</td>
+                    <td>None</td>
+                    <td><span class="badge badge-medium">MEDIUM</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="danger-box">
+            <h3>🛑 Critical - Requires Full Testing</h3>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Eventuate Platform version upgrades</li>
+                <li>Spring Boot major version changes</li>
+                <li>Kafka version updates</li>
+                <li>CDC service configuration changes</li>
+                <li>Saga compensation logic modifications</li>
+            </ul>
+        </div>
+
+        <div class="highlight-box">
+            <h3>⚠️ Risky to Change</h3>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Saga orchestration flows</li>
+                <li>Required fields in events/commands</li>
+                <li>Database schema for replicated data</li>
+                <li>Message broker configuration</li>
+            </ul>
+        </div>
+
+        <div class="success-box">
+            <h3>✅ Safe to Change</h3>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Internal service logic (no API change)</li>
+                <li>Add optional fields to events/commands</li>
+                <li>Add new endpoints (non-breaking)</li>
+                <li>Performance optimizations</li>
+                <li>Add new services (if not in critical path)</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Database Dependencies -->
+    <div class="page">
+        <div class="header">
+            <h1>Service-to-Database Dependencies</h1>
+            <div class="page-number">Page 9</div>
+        </div>
+
+        <h2>Database-per-Service Pattern</h2>
+        
+        <div class="diagram-box">
+┌─────────────────────────────────────────────────────────────┐
+│              Database-per-Service Pattern                   │
+└─────────────────────────────────────────────────────────────┘
+
+MySQL Server (Single Instance, Multiple Schemas)
+├── ftgo_consumer_service (Schema)
+│   ├── Owner: ftgo-consumer-service
+│   └── Tables: consumers, eventuate tables
+│
+├── ftgo_order_service (Schema)
+│   ├── Owner: ftgo-order-service
+│   └── Tables: orders, order_line_items, restaurants (replica)
+│
+├── ftgo_kitchen_service (Schema)
+│   ├── Owner: ftgo-kitchen-service
+│   └── Tables: tickets, restaurants (replica)
+│
+├── ftgo_restaurant_service (Schema)
+│   ├── Owner: ftgo-restaurant-service (MASTER)
+│   └── Tables: restaurants (master), menu_items
+│
+├── ftgo_accounting_service (Schema)
+│   ├── Owner: ftgo-accounting-service
+│   └── Tables: events (event store), entities, snapshots
+│
+└── ftgo_delivery_service (Schema)
+    ├── Owner: ftgo-delivery-service
+    └── Tables: deliveries, restaurants (replica)
+
+DynamoDB Local
+└── ftgoorderhistoryservice
+    ├── Owner: ftgo-order-history-service
+    └── Tables: Order views (denormalized CQRS)
+        </div>
+
+        <h2>Service Database Mapping</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Database Type</th>
+                    <th>Schema Name</th>
+                    <th>Pattern</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>consumer-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_consumer_service</td>
+                    <td>Traditional ORM</td>
+                </tr>
+                <tr>
+                    <td>order-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_order_service</td>
+                    <td>ORM + Saga state</td>
+                </tr>
+                <tr>
+                    <td>kitchen-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_kitchen_service</td>
+                    <td>Traditional ORM</td>
+                </tr>
+                <tr>
+                    <td>restaurant-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_restaurant_service</td>
+                    <td>ORM (master data)</td>
+                </tr>
+                <tr>
+                    <td>accounting-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_accounting_service</td>
+                    <td>Event Sourcing</td>
+                </tr>
+                <tr>
+                    <td>delivery-service</td>
+                    <td>MySQL</td>
+                    <td>ftgo_delivery_service</td>
+                    <td>Traditional ORM</td>
+                </tr>
+                <tr>
+                    <td>order-history-service</td>
+                    <td>DynamoDB</td>
+                    <td>N/A (NoSQL)</td>
+                    <td>CQRS view</td>
+                </tr>
+                <tr>
+                    <td>api-gateway</td>
+                    <td>None</td>
+                    <td>N/A</td>
+                    <td>Stateless</td>
+                </tr>
+                <tr>
+                    <td>api-gateway-graphql</td>
+                    <td>None</td>
+                    <td>N/A</td>
+                    <td>Stateless</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info-card">
+            <h3>Schema Isolation & Security</h3>
+            <ul style="margin-left: 20px;">
+                <li><strong>Schema-per-Service:</strong> Each service has its own MySQL schema</li>
+                <li><strong>Dedicated Users:</strong> Each schema has a dedicated MySQL user</li>
+                <li><strong>Least Privilege:</strong> Users can only access their own schema</li>
+                <li><strong>No Cross-Schema Queries:</strong> Services cannot directly query other databases</li>
+                <li><strong>CDC Tables:</strong> Each schema has Eventuate Tram outbox tables</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Database to Database -->
+    <div class="page">
+        <div class="header">
+            <h1>Database-to-Database Dependencies</h1>
+            <div class="page-number">Page 11</div>
+        </div>
+
+        <h2>Cross-Database Data Flow via CDC + Kafka</h2>
+        
+        <div class="flow-diagram">
+            <div style="background: #e8eaf6; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Service A Database</strong><br/>
+                Transaction commits
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Outbox Table</strong><br/>
+                Message written in same transaction
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>CDC Service</strong><br/>
+                Reads MySQL binlog
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #667eea; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Kafka Topic</strong><br/>
+                Message published
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #e8eaf6; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Service B</strong><br/>
+                Subscribes and processes
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #e8eaf6; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Service B Database</strong><br/>
+                Updates local state
+            </div>
+        </div>
+
+        <h2>Database Replication Patterns</h2>
+
+        <h3>Pattern 1: Restaurant Data Replication (Master → Replicas)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Database</th>
+                    <th>Role</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>ftgo_restaurant_service</td>
+                    <td><span class="badge badge-critical">MASTER</span></td>
+                    <td>Single source of truth for restaurant data</td>
+                </tr>
+                <tr>
+                    <td>ftgo_order_service</td>
+                    <td><span class="badge badge-low">REPLICA</span></td>
+                    <td>Needs restaurant menu for order validation</td>
+                </tr>
+                <tr>
+                    <td>ftgo_kitchen_service</td>
+                    <td><span class="badge badge-low">REPLICA</span></td>
+                    <td>Needs restaurant info for ticket creation</td>
+                </tr>
+                <tr>
+                    <td>ftgo_delivery_service</td>
+                    <td><span class="badge badge-low">REPLICA</span></td>
+                    <td>Needs restaurant location for delivery</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <strong>Why Replicate?</strong> Replication avoids cross-service database queries while maintaining data consistency through eventual consistency patterns. Restaurant data changes infrequently, making this acceptable.
+        </div>
+    </div>
+
+    <!-- More Database Patterns -->
+    <div class="page">
+        <div class="header">
+            <h1>Database Patterns Continued</h1>
+            <div class="page-number">Page 12</div>
+        </div>
+
+        <h3>Pattern 2: Order Events → Order History (CQRS View)</h3>
+        
+        <div class="diagram-box">
+Source: ftgo_order_service (MySQL - Normalized)
+  └── Order state changes
+      └── Events: OrderCreated, OrderAuthorized, 
+                  OrderCancelled, OrderRejected
+          └── Kafka
+              └── ftgo-order-history-service subscribes
+                  └── Updates DynamoDB (Denormalized)
+
+Data Transformation:
+  Source: Normalized relational (orders, order_line_items)
+  Target: Denormalized NoSQL documents (optimized for queries)
+  Pattern: CQRS (Command Query Responsibility Segregation)
+        </div>
+
+        <h3>Pattern 3: Saga Coordination (Cross-Database Transaction)</h3>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Step</th>
+                    <th>Database</th>
+                    <th>Operation</th>
+                    <th>Consistency</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>ftgo_order_service</td>
+                    <td>Create Order (APPROVAL_PENDING)</td>
+                    <td>ACID (local)</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>ftgo_consumer_service</td>
+                    <td>Validate consumer</td>
+                    <td>ACID (local)</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>ftgo_kitchen_service</td>
+                    <td>Create Ticket</td>
+                    <td>ACID (local)</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>ftgo_accounting_service</td>
+                    <td>Authorize payment (event store)</td>
+                    <td>ACID (local)</td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>ftgo_kitchen_service</td>
+                    <td>Confirm Ticket</td>
+                    <td>ACID (local)</td>
+                </tr>
+                <tr>
+                    <td>6</td>
+                    <td>ftgo_order_service</td>
+                    <td>Update Order (APPROVED)</td>
+                    <td>ACID (local)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info-card">
+            <h3>Consistency Guarantees</h3>
+            <ul style="margin-left: 20px;">
+                <li><strong>Local ACID:</strong> Each database change is a local ACID transaction</li>
+                <li><strong>Cross-Database:</strong> Eventual consistency via saga compensations</li>
+                <li><strong>Message Delivery:</strong> At-least-once delivery guaranteed by Kafka</li>
+                <li><strong>Idempotency:</strong> Services must handle duplicate messages</li>
+            </ul>
+        </div>
+
+        <h2>CDC Service Database Connections</h2>
+        
+        <div class="diagram-box">
+CDC Service Monitors 8 Pipelines:
+  Pipeline 1: ftgo_consumer_service     (eventuate-tram)
+  Pipeline 2: ftgo_order_service        (eventuate-tram)
+  Pipeline 3: ftgo_kitchen_service      (eventuate-tram)
+  Pipeline 4: ftgo_restaurant_service   (eventuate-tram)
+  Pipeline 5: ftgo_accounting_service   (eventuate-tram)
+  Pipeline 6: ftgoorderhistoryservice   (eventuate-tram)
+  Pipeline 7: ftgo_accounting_service   (eventuate-local)
+  Pipeline 8: ftgo_delivery_service     (eventuate-tram)
+
+Reader: MySQL Binlog Reader
+  - Reads binlog from mysql:3306
+  - Monitors outbox tables in each schema
+  - Publishes to Kafka topics
+  - Critical component for all messaging
+        </div>
+    </div>
+
+    <!-- Data Consistency -->
+    <div class="page">
+        <div class="header">
+            <h1>Data Consistency Patterns</h1>
+            <div class="page-number">Page 13</div>
+        </div>
+
+        <h2>Consistency Model Overview</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pattern</th>
+                    <th>Databases</th>
+                    <th>Model</th>
+                    <th>Mechanism</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Restaurant Replication</td>
+                    <td>restaurant → order, kitchen, delivery</td>
+                    <td>Eventual</td>
+                    <td>Domain events</td>
+                </tr>
+                <tr>
+                    <td>Order CQRS View</td>
+                    <td>order → dynamodb</td>
+                    <td>Eventual</td>
+                    <td>Domain events</td>
+                </tr>
+                <tr>
+                    <td>Saga Transactions</td>
+                    <td>order, consumer, kitchen, accounting</td>
+                    <td>Eventual (compensating)</td>
+                    <td>Saga commands</td>
+                </tr>
+                <tr>
+                    <td>Event Sourcing</td>
+                    <td>accounting (event store)</td>
+                    <td>Strong (per aggregate)</td>
+                    <td>Event store</td>
+                </tr>
+                <tr>
+                    <td>API Composition</td>
+                    <td>Multiple DBs (read via services)</td>
+                    <td>Real-time inconsistency</td>
+                    <td>Gateway aggregation</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Database Dependency Impact Scenarios</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Change Scenario</th>
+                    <th>Affected Databases</th>
+                    <th>Impact</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Restaurant menu change</td>
+                    <td>restaurant, order, kitchen, delivery</td>
+                    <td><span class="badge badge-low">Eventual propagation delay</span></td>
+                </tr>
+                <tr>
+                    <td>Order created</td>
+                    <td>order, consumer, kitchen, accounting</td>
+                    <td><span class="badge badge-medium">Saga coordination required</span></td>
+                </tr>
+                <tr>
+                    <td>Consumer validation fails</td>
+                    <td>order, consumer</td>
+                    <td><span class="badge badge-medium">Saga rollback</span></td>
+                </tr>
+                <tr>
+                    <td>CDC service down</td>
+                    <td>All MySQL → Kafka</td>
+                    <td><span class="badge badge-high">Message delivery delayed</span></td>
+                </tr>
+                <tr>
+                    <td>MySQL binlog full</td>
+                    <td>All services</td>
+                    <td><span class="badge badge-critical">CDC stops</span></td>
+                </tr>
+                <tr>
+                    <td>DynamoDB unavailable</td>
+                    <td>Order history queries</td>
+                    <td><span class="badge badge-low">Fallback to order-service API</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="danger-box">
+            <h3>Critical Dependencies</h3>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li><strong>CDC Service:</strong> Single point of failure for all async messaging</li>
+                <li><strong>Kafka:</strong> Message broker must be highly available</li>
+                <li><strong>MySQL Binlog:</strong> Must be monitored for size and retention</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Impact Analysis -->
+    <div class="page">
+        <div class="header">
+            <h1>Impact Analysis & Change Buckets</h1>
+            <div class="page-number">Page 14</div>
+        </div>
+
+        <h2>Change Impact Classification</h2>
+
+        <h3>Bucket 1: Low Impact (Isolated Changes)</h3>
+        <div class="success-box">
+            <p><strong>Definition:</strong> Changes affecting a single service with no external API changes</p>
+            <p><strong>Examples:</strong></p>
+            <ul style="margin-left: 20px; margin-top: 5px;">
+                <li>Internal service logic changes</li>
+                <li>Database schema changes (within service boundary)</li>
+                <li>Internal refactoring</li>
+                <li>Bug fixes (non-API)</li>
+            </ul>
+            <p style="margin-top: 10px;"><strong>Risk:</strong> <span class="badge badge-low">LOW</span> | <strong>Rollback:</strong> Easy (single service)</p>
+        </div>
+
+        <h3>Bucket 2: Medium Impact (API Contract Changes)</h3>
+        <div class="highlight-box">
+            <p><strong>Definition:</strong> Changes to service APIs that affect consumers</p>
+            <p><strong>Examples:</strong></p>
+            <ul style="margin-left: 20px; margin-top: 5px;">
+                <li>Add optional field to OrderCreatedEvent</li>
+                <li>Add new REST endpoint to Consumer service</li>
+                <li>Add new command to Kitchen service API</li>
+                <li>Event schema additions (backward compatible)</li>
+            </ul>
+            <p style="margin-top: 10px;"><strong>Risk:</strong> <span class="badge badge-medium">MEDIUM</span> | <strong>Strategy:</strong> Blue-green deployment, versioned APIs</p>
+        </div>
+
+        <h3>Bucket 3: High Impact (Saga & Orchestration)</h3>
+        <div class="danger-box">
+            <p><strong>Definition:</strong> Changes to saga flows or orchestration logic</p>
+            <p><strong>Examples:</strong></p>
+            <ul style="margin-left: 20px; margin-top: 5px;">
+                <li>Add new step to CreateOrderSaga</li>
+                <li>Modify saga compensation logic</li>
+                <li>Change saga participant command structure</li>
+            </ul>
+            <p style="margin-top: 10px;"><strong>Risk:</strong> <span class="badge badge-high">HIGH</span> | <strong>Strategy:</strong> Versioned sagas, gradual migration</p>
+        </div>
+
+        <h3>Bucket 4: Critical Impact (Platform & Infrastructure)</h3>
+        <div style="background: #1a202c; color: white; padding: 15px; margin: 15px 0; border-radius: 5px;">
+            <p><strong>Definition:</strong> Changes to shared infrastructure and platform dependencies</p>
+            <p><strong>Examples:</strong></p>
+            <ul style="margin-left: 20px; margin-top: 5px;">
+                <li>Upgrade Eventuate Platform from 2022.0 to 2023.0</li>
+                <li>Upgrade Spring Boot 2.x to 3.x</li>
+                <li>Update Kafka clients</li>
+                <li>MySQL version upgrade</li>
+            </ul>
+            <p style="margin-top: 10px;"><strong>Risk:</strong> <span class="badge badge-critical">CRITICAL</span> | <strong>Strategy:</strong> Extensive staging, canary deployment, rollback plan</p>
+        </div>
+    </div>
+
+    <!-- Change Checklists -->
+    <div class="page">
+        <div class="header">
+            <h1>Change Management Checklists</h1>
+            <div class="page-number">Page 15</div>
+        </div>
+
+        <h2>Bucket 1 Checklist (Low Impact)</h2>
+        <ul class="checklist">
+            <li>Unit tests pass</li>
+            <li>Integration tests pass</li>
+            <li>Database migrations tested</li>
+            <li>Service can be deployed independently</li>
+            <li>Rollback plan documented</li>
+        </ul>
+
+        <h2>Bucket 2 Checklist (Medium Impact)</h2>
+        <ul class="checklist">
+            <li>Contract tests updated</li>
+            <li>Consumer compatibility verified</li>
+            <li>API documentation updated</li>
+            <li>Backward compatibility ensured</li>
+            <li>Consumer notification sent</li>
+            <li>Gradual rollout plan</li>
+        </ul>
+
+        <h2>Bucket 3 Checklist (High Impact)</h2>
+        <ul class="checklist">
+            <li>Saga flow documented</li>
+            <li>Compensation logic tested</li>
+            <li>All participants updated</li>
+            <li>End-to-end saga tests pass</li>
+            <li>Rollback saga tested</li>
+            <li>Deployment sequence planned</li>
+            <li>Monitoring dashboards updated</li>
+        </ul>
+
+        <h2>Bucket 4 Checklist (Critical Impact)</h2>
+        <ul class="checklist">
+            <li>Full regression suite passes</li>
+            <li>Performance benchmarks completed</li>
+            <li>Staging environment validated</li>
+            <li>All services compatible with new version</li>
+            <li>Rollback tested in staging</li>
+            <li>Canary deployment plan</li>
+            <li>Incident response plan</li>
+            <li>Communication plan for stakeholders</li>
+        </ul>
+
+        <h2>Database Change Buckets</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Bucket</th>
+                    <th>Scope</th>
+                    <th>Impact</th>
+                    <th>Strategy</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>DB-1</td>
+                    <td>Single schema</td>
+                    <td><span class="badge badge-low">LOW</span></td>
+                    <td>Schema first, then code</td>
+                </tr>
+                <tr>
+                    <td>DB-2</td>
+                    <td>Event schemas</td>
+                    <td><span class="badge badge-medium">MEDIUM</span></td>
+                    <td>Consumers first, then publisher</td>
+                </tr>
+                <tr>
+                    <td>DB-3</td>
+                    <td>Replicated data</td>
+                    <td><span class="badge badge-high">HIGH</span></td>
+                    <td>Master first, monitor lag</td>
+                </tr>
+                <tr>
+                    <td>DB-4</td>
+                    <td>CDC & messaging</td>
+                    <td><span class="badge badge-critical">CRITICAL</span></td>
+                    <td>Blue-green, traffic shadowing</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Deployment Strategy -->
+    <div class="page">
+        <div class="header">
+            <h1>Recommended Deployment Strategy</h1>
+            <div class="page-number">Page 16</div>
+        </div>
+
+        <h2>Deployment Order for Coordinated Changes</h2>
+        
+        <div class="flow-diagram">
+            <div style="background: #667eea; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Step 1: Update *-api Modules</strong><br/>
+                Publish contracts first
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #764ba2; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Step 2: Update Saga Participants</strong><br/>
+                Consumer, Kitchen, Accounting services
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #5a67d8; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Step 3: Update Saga Orchestrator</strong><br/>
+                Order service
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #4c51bf; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Step 4: Update Event Subscribers</strong><br/>
+                Order History, Delivery services
+            </div>
+            <div class="arrow">↓</div>
+            <div style="background: #434190; color: white; padding: 15px; border-radius: 8px; margin: 10px;">
+                <strong>Step 5: Update API Gateways</strong><br/>
+                Last to ensure backend is ready
+            </div>
+        </div>
+
+        <h2>Safe Change Patterns Summary</h2>
+        
+        <div class="service-grid">
+            <div class="service-card" style="border-color: #28a745;">
+                <h4 style="color: #28a745;">✅ Safe to Change</h4>
+                <ul style="font-size: 11px;">
+                    <li>Internal service logic</li>
+                    <li>Add optional fields to events</li>
+                    <li>Add new endpoints (non-breaking)</li>
+                    <li>Performance optimizations</li>
+                    <li>Add new services</li>
+                </ul>
+            </div>
+            
+            <div class="service-card" style="border-color: #ffc107;">
+                <h4 style="color: #d68910;">⚠️ Risky to Change</h4>
+                <ul style="font-size: 11px;">
+                    <li>Saga orchestration flow</li>
+                    <li>Required fields in events/commands</li>
+                    <li>Database schema (replicated data)</li>
+                    <li>Message broker configuration</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;" class="service-card" style="border-color: #dc3545;">
+            <h4 style="color: #c53030;">🛑 Critical - Requires Full Testing</h4>
+            <ul style="font-size: 11px;">
+                <li>Eventuate Platform version</li>
+                <li>Spring Boot major version</li>
+                <li>Kafka version</li>
+                <li>CDC service configuration</li>
+                <li>Saga compensation logic</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Inter-Bucket Dependencies -->
+    <div class="page">
+        <div class="header">
+            <h1>Inter-Bucket Dependencies</h1>
+            <div class="page-number">Page 17</div>
+        </div>
+
+        <h2>Dependency Hierarchy</h2>
+        
+        <div class="diagram-box">
+Bucket 4 (Platform - CRITICAL)
+    ↓ (affects all buckets below)
+    │
+Bucket 3 (Sagas - HIGH) ←→ Bucket 2 (APIs - MEDIUM)
+    ↓                           ↓
+    │                           │
+Bucket 1 (Single Service - LOW)
+    ↓
+    │
+Bucket DB-1 (Single DB) → Bucket DB-2 (Events) → Bucket DB-3 (Replicated)
+                                                        ↓
+                                                        │
+                                                 Bucket DB-4 (CDC - CRITICAL)
+        </div>
+
+        <div class="info-card">
+            <h3>Rule: Always Consider Upstream Buckets</h3>
+            <p>When making changes in downstream buckets, always verify that upstream buckets are stable and compatible. Changes in higher-risk buckets cascade down to affect lower-risk components.</p>
+        </div>
+
+        <h2>Change Strategy Framework</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Phase</th>
+                    <th>Action</th>
+                    <th>Bucket Focus</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1. Start Small</td>
+                    <td>Prove changes in isolated services first</td>
+                    <td>Bucket 1</td>
+                </tr>
+                <tr>
+                    <td>2. Expand Gradually</td>
+                    <td>Roll out API changes with versioning</td>
+                    <td>Bucket 2</td>
+                </tr>
+                <tr>
+                    <td>3. Coordinate Carefully</td>
+                    <td>Saga changes require all participants ready</td>
+                    <td>Bucket 3</td>
+                </tr>
+                <tr>
+                    <td>4. Plan Extensively</td>
+                    <td>Platform changes need comprehensive testing</td>
+                    <td>Bucket 4</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Monitoring & Observability Recommendations</h2>
+        
+        <div class="service-grid">
+            <div class="service-card">
+                <h4>Service-to-Service</h4>
+                <ul style="font-size: 11px;">
+                    <li>Monitor Kafka lag</li>
+                    <li>Saga completion rates</li>
+                    <li>Command/reply latency</li>
+                </ul>
+            </div>
+            
+            <div class="service-card">
+                <h4>Service-to-Database</h4>
+                <ul style="font-size: 11px;">
+                    <li>Connection pool metrics</li>
+                    <li>Query performance</li>
+                    <li>Transaction duration</li>
+                </ul>
+            </div>
+            
+            <div class="service-card">
+                <h4>Database-to-Database</h4>
+                
