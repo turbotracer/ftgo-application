@@ -1,0 +1,631 @@
+{
+  "repository": {
+    "name": "ftgo-application",
+    "type": "microservices",
+    "description": "Food To Go (FTGO) - Example microservice application demonstrating patterns from the Microservices Patterns book",
+    "architecture_style": "event-driven-microservices",
+    "maturity_level": "reference_implementation",
+    "purpose": "Educational/example code illustrating microservice architecture patterns"
+  },
+  "tech_stack": {
+    "primary_language": "Java",
+    "java_version": "1.8",
+    "build_system": {
+      "tool": "Gradle",
+      "wrapper": true,
+      "multi_module": true
+    },
+    "backend_frameworks": {
+      "spring_boot": "2.2.6.RELEASE",
+      "spring_cloud_contract": "2.2.0.RELEASE",
+      "spring_cloud_gateway": "2.0.0.RELEASE",
+      "spring_cloud_sleuth": "2.2.2.RELEASE",
+      "spring_dependency_management": "1.0.3.RELEASE"
+    },
+    "frontend_frameworks": {
+      "graphql": {
+        "language": "TypeScript/JavaScript",
+        "runtime": "Node.js",
+        "server": "Apollo Server Express 1.3.2",
+        "client": "Apollo Client 2.6.4",
+        "build_tool": "TypeScript Compiler",
+        "location": "ftgo-api-gateway-graphql"
+      }
+    },
+    "messaging": {
+      "broker": "Apache Kafka",
+      "framework": "Eventuate Tram",
+      "patterns": [
+        "event-sourcing",
+        "transactional-messaging",
+        "saga-orchestration"
+      ]
+    },
+    "databases": {
+      "relational": {
+        "type": "MySQL",
+        "usage": "Primary data store for most services",
+        "pattern": "database-per-service",
+        "services": [
+          "ftgo_consumer_service",
+          "ftgo_order_service",
+          "ftgo_kitchen_service",
+          "ftgo_restaurant_service",
+          "ftgo_accounting_service",
+          "ftgo_delivery_service"
+        ]
+      },
+      "nosql": {
+        "type": "AWS DynamoDB (Local)",
+        "usage": "CQRS view for order history",
+        "services": [
+          "ftgo-order-history-service"
+        ]
+      }
+    },
+    "infrastructure": {
+      "containerization": "Docker",
+      "orchestration_dev": "Docker Compose",
+      "orchestration_prod": "Kubernetes (supported)",
+      "service_mesh": false,
+      "api_gateway": true,
+      "distributed_tracing": "Zipkin with Spring Cloud Sleuth",
+      "monitoring": "Prometheus + Micrometer"
+    },
+    "key_libraries": {
+      "eventuate_platform": "2022.0.RELEASE",
+      "eventuate_common": "0.15.0.RELEASE",
+      "eventuate_cdc": "0.13.0.RELEASE",
+      "eventuate_tram_sagas": "0.19.0.RELEASE",
+      "grpc": "1.47.0",
+      "protobuf": "3.20.1",
+      "swagger_ui": "3.23.11",
+      "kafka_clients": "2.3.0"
+    },
+    "testing": {
+      "unit": "JUnit",
+      "integration": "Spring Boot Test, REST Assured",
+      "contract": "Spring Cloud Contract",
+      "end_to_end": "Cucumber (BDD)",
+      "test_frameworks": [
+        "Hamcrest",
+        "WireMock",
+        "Jest (for GraphQL gateway)"
+      ]
+    }
+  },
+  "microservices": [
+    {
+      "name": "ftgo-consumer-service",
+      "port": 8081,
+      "responsibility": "Manages consumer (customer) information and validation",
+      "tech": "Spring Boot + JPA + Eventuate Tram",
+      "database": "MySQL (ftgo_consumer_service)",
+      "key_aggregates": [
+        "Consumer"
+      ],
+      "api_style": "REST",
+      "swagger_ui": "http://localhost:8081/swagger-ui/index.html",
+      "messaging_role": "command_handler",
+      "saga_participant": true
+    },
+    {
+      "name": "ftgo-restaurant-service",
+      "port": 8084,
+      "responsibility": "Manages restaurant information, menus, and availability",
+      "tech": "Spring Boot + JPA + Eventuate Tram",
+      "database": "MySQL (ftgo_restaurant_service)",
+      "key_aggregates": [
+        "Restaurant"
+      ],
+      "api_style": "REST",
+      "swagger_ui": "http://localhost:8084/swagger-ui/index.html",
+      "messaging_role": "event_publisher",
+      "saga_participant": false,
+      "additional_deployments": [
+        "AWS Lambda version available (ftgo-restaurant-service-aws-lambda)"
+      ]
+    },
+    {
+      "name": "ftgo-order-service",
+      "port": 8082,
+      "responsibility": "Core service for order management and saga orchestration",
+      "tech": "Spring Boot + JPA + Eventuate Tram Sagas + gRPC",
+      "database": "MySQL (ftgo_order_service)",
+      "key_aggregates": [
+        "Order",
+        "Restaurant (replica)"
+      ],
+      "api_style": "REST + gRPC",
+      "swagger_ui": "http://localhost:8082/swagger-ui/index.html",
+      "messaging_role": "saga_orchestrator",
+      "saga_participant": true,
+      "sagas": [
+        "CreateOrderSaga",
+        "CancelOrderSaga",
+        "ReviseOrderSaga"
+      ],
+      "protocols": [
+        "HTTP/REST",
+        "gRPC",
+        "Kafka messaging"
+      ]
+    },
+    {
+      "name": "ftgo-kitchen-service",
+      "port": 8083,
+      "responsibility": "Manages kitchen operations and ticket lifecycle",
+      "tech": "Spring Boot + JPA + Eventuate Tram",
+      "database": "MySQL (ftgo_kitchen_service)",
+      "key_aggregates": [
+        "Ticket",
+        "Restaurant (kitchen view)"
+      ],
+      "api_style": "REST",
+      "swagger_ui": "http://localhost:8083/swagger-ui/index.html",
+      "messaging_role": "command_handler",
+      "saga_participant": true
+    },
+    {
+      "name": "ftgo-accounting-service",
+      "port": 8085,
+      "responsibility": "Handles payment authorization and accounting using event sourcing",
+      "tech": "Spring Boot + Eventuate Client (Event Sourcing) + Eventuate Tram",
+      "database": "MySQL (ftgo_accounting_service)",
+      "key_aggregates": [
+        "Account (event-sourced)"
+      ],
+      "api_style": "REST",
+      "swagger_ui": "http://localhost:8085/swagger-ui/index.html",
+      "messaging_role": "command_handler",
+      "saga_participant": true,
+      "pattern_highlight": "Event Sourcing implementation"
+    },
+    {
+      "name": "ftgo-delivery-service",
+      "port": 8089,
+      "responsibility": "Manages delivery and courier assignment",
+      "tech": "Spring Boot + JPA + Eventuate Tram",
+      "database": "MySQL (ftgo_delivery_service)",
+      "key_aggregates": [
+        "Delivery",
+        "Restaurant (delivery view)"
+      ],
+      "api_style": "REST",
+      "messaging_role": "command_handler",
+      "saga_participant": true
+    },
+    {
+      "name": "ftgo-order-history-service",
+      "port": 8086,
+      "responsibility": "CQRS view service providing order history queries",
+      "tech": "Spring Boot + AWS DynamoDB + Eventuate Tram",
+      "database": "DynamoDB Local",
+      "api_style": "REST",
+      "swagger_ui": "http://localhost:8086/swagger-ui/index.html",
+      "messaging_role": "event_consumer",
+      "saga_participant": false,
+      "pattern_highlight": "CQRS view implementation"
+    },
+    {
+      "name": "ftgo-api-gateway",
+      "port": 8087,
+      "responsibility": "API Gateway using Spring Cloud Gateway (reactive)",
+      "tech": "Spring Cloud Gateway + WebFlux",
+      "database": "none",
+      "api_style": "REST (reactive)",
+      "messaging_role": "none",
+      "saga_participant": false,
+      "pattern_highlight": "API Gateway pattern with API composition"
+    },
+    {
+      "name": "ftgo-api-gateway-graphql",
+      "port": "not_in_main_compose",
+      "responsibility": "GraphQL API Gateway with federated queries",
+      "tech": "Node.js + TypeScript + Apollo Server",
+      "database": "none",
+      "api_style": "GraphQL",
+      "messaging_role": "none",
+      "saga_participant": false,
+      "pattern_highlight": "GraphQL gateway with API composition and DataLoader"
+    }
+  ],
+  "shared_modules": {
+    "ftgo-common": {
+      "description": "Common domain objects (Money, Address, etc.)",
+      "usage": "All services"
+    },
+    "ftgo-common-jpa": {
+      "description": "Common JPA configurations and utilities",
+      "usage": "Services using JPA"
+    },
+    "common-swagger": {
+      "description": "Swagger/OpenAPI configuration",
+      "usage": "All REST services"
+    },
+    "ftgo-test-util": {
+      "description": "Testing utilities",
+      "usage": "Test code"
+    },
+    "ftgo-test-util-json-schema": {
+      "description": "JSON schema validation for tests",
+      "usage": "Test code"
+    },
+    "*-api modules": {
+      "description": "API contracts (DTOs, events, commands) for each service",
+      "pattern": "Published language pattern",
+      "usage": "Shared between services"
+    },
+    "*-contracts modules": {
+      "description": "Spring Cloud Contract definitions for consumer-driven contracts",
+      "usage": "Contract testing"
+    },
+    "*-api-spec modules": {
+      "description": "JSON Schema specifications for API messages",
+      "usage": "Code generation and validation"
+    }
+  },
+  "folder_structure": {
+    "service_pattern": {
+      "description": "Each service follows consistent structure",
+      "typical_packages": [
+        "domain - Domain logic and aggregates (DDD)",
+        "messaging - Message handlers and adapters",
+        "web - Spring MVC controllers (REST endpoints)",
+        "service - Application services and use cases",
+        "main - Main application class",
+        "sagas - Saga definitions (if orchestrator)",
+        "sagaparticipants - Saga participant proxies (if orchestrator)"
+      ]
+    },
+    "root_structure": {
+      "*-service/": "Deployable microservices",
+      "*-api/": "Published API contracts (shared libraries)",
+      "*-contracts/": "Spring Cloud Contract definitions",
+      "*-api-spec/": "JSON Schema specifications",
+      "deployment/": "Kubernetes deployment files",
+      "mysql/": "MySQL initialization scripts",
+      "dynamodblocal/": "Local DynamoDB setup",
+      "dynamodblocal-init/": "DynamoDB initialization",
+      "buildSrc/": "Custom Gradle plugins",
+      "gradle/": "Gradle wrapper files"
+    }
+  },
+  "architectural_patterns": {
+    "microservice_patterns": [
+      {
+        "pattern": "Database per Service",
+        "implementation": "Each service has its own MySQL schema",
+        "location": "mysql/compile-schema-per-service.sh"
+      },
+      {
+        "pattern": "Saga (Orchestration)",
+        "implementation": "Eventuate Tram Sagas framework",
+        "location": "ftgo-order-service/sagas/*"
+      },
+      {
+        "pattern": "Event Sourcing",
+        "implementation": "Account aggregate in accounting service",
+        "location": "ftgo-accounting-service/domain/Account.java"
+      },
+      {
+        "pattern": "CQRS",
+        "implementation": "Order history view materialized from events",
+        "location": "ftgo-order-history-service"
+      },
+      {
+        "pattern": "API Gateway",
+        "implementation": "Spring Cloud Gateway and GraphQL gateway",
+        "location": "ftgo-api-gateway, ftgo-api-gateway-graphql"
+      },
+      {
+        "pattern": "API Composition",
+        "implementation": "Gateway composes responses from multiple services",
+        "location": "ftgo-api-gateway (order history endpoint)"
+      },
+      {
+        "pattern": "Transactional Messaging",
+        "implementation": "Eventuate Tram with CDC",
+        "location": "All services using messaging"
+      },
+      {
+        "pattern": "Domain-Driven Design",
+        "implementation": "Aggregates in domain packages",
+        "location": "*/domain/* packages"
+      },
+      {
+        "pattern": "Consumer-Driven Contracts",
+        "implementation": "Spring Cloud Contract",
+        "location": "*-contracts modules"
+      },
+      {
+        "pattern": "Service Registry (implicit)",
+        "implementation": "Docker Compose service discovery",
+        "location": "docker-compose.yml"
+      }
+    ]
+  },
+  "communication_patterns": {
+    "synchronous": {
+      "rest": {
+        "protocol": "HTTP/JSON",
+        "usage": "External API and some inter-service calls",
+        "documentation": "Swagger UI per service",
+        "clients": "RestTemplate, WebClient (reactive gateway)"
+      },
+      "grpc": {
+        "protocol": "HTTP/2 + Protocol Buffers",
+        "usage": "Order service exposes gRPC API",
+        "definition": "ftgo-order-service/src/main/proto/OrderService.proto"
+      }
+    },
+    "asynchronous": {
+      "messaging": {
+        "broker": "Apache Kafka",
+        "framework": "Eventuate Tram",
+        "message_types": [
+          "Domain Events (publish/subscribe)",
+          "Commands (point-to-point)",
+          "Command Replies"
+        ],
+        "transactional_guarantee": "At-least-once delivery with CDC"
+      },
+      "cdc": {
+        "service": "Eventuate CDC Service",
+        "port": 8099,
+        "mechanism": "MySQL binlog reading",
+        "purpose": "Implements transactional outbox pattern"
+      }
+    }
+  },
+  "data_models": {
+    "persistence_patterns": {
+      "jpa": {
+        "services": [
+          "consumer-service",
+          "restaurant-service",
+          "order-service",
+          "kitchen-service",
+          "delivery-service"
+        ],
+        "orm": "Hibernate",
+        "approach": "Entity aggregates with JPA annotations"
+      },
+      "event_sourcing": {
+        "services": [
+          "accounting-service"
+        ],
+        "framework": "Eventuate Client",
+        "storage": "MySQL with event store tables"
+      },
+      "nosql": {
+        "services": [
+          "order-history-service"
+        ],
+        "database": "DynamoDB",
+        "approach": "Key-value store for denormalized views"
+      }
+    },
+    "key_entities": {
+      "Order": {
+        "service": "ftgo-order-service",
+        "table": "orders",
+        "states": [
+          "APPROVAL_PENDING",
+          "APPROVED",
+          "REJECTED",
+          "REVISION_PENDING"
+        ]
+      },
+      "Consumer": {
+        "service": "ftgo-consumer-service",
+        "table": "consumers"
+      },
+      "Restaurant": {
+        "service": "ftgo-restaurant-service (master), replicated in other services",
+        "pattern": "Shared data pattern with replication"
+      },
+      "Ticket": {
+        "service": "ftgo-kitchen-service",
+        "table": "tickets",
+        "description": "Kitchen's view of an order"
+      },
+      "Account": {
+        "service": "ftgo-accounting-service",
+        "storage": "event_store",
+        "pattern": "Event-sourced aggregate"
+      }
+    }
+  },
+  "deployment": {
+    "local_development": {
+      "method": "Docker Compose",
+      "command": "./gradlew :composeUp",
+      "prerequisites": [
+        "Docker",
+        "Docker Compose",
+        "Java 8+",
+        "Internet (for dependencies)"
+      ],
+      "infrastructure_services": [
+        "MySQL (port 3306)",
+        "Kafka (port 9092)",
+        "Zookeeper (port 2181)",
+        "CDC Service (port 8099)",
+        "DynamoDB Local (port 8000)",
+        "Zipkin (port 9411)",
+        "Kafka GUI (port 9088, optional)"
+      ]
+    },
+    "production": {
+      "supported_platform": "Kubernetes",
+      "deployment_files": "deployment/kubernetes/",
+      "deployment_script": "deployment/kubernetes/scripts/kubernetes-deploy-all.sh",
+      "orchestration_tool": "Skaffold (skaffold.yaml available)"
+    },
+    "docker_images": {
+      "base_image": "eventuateio base images",
+      "build_process": "Multi-stage Dockerfiles per service",
+      "registry": "Can be published to custom registry"
+    }
+  },
+  "build_and_test": {
+    "build_commands": {
+      "contracts": "./gradlew buildContracts",
+      "compile": "./gradlew assemble",
+      "compile_all": "./gradlew testClasses compileIntegrationTestJava compileComponentTestJava",
+      "test": "./gradlew test",
+      "integration_test": "Per-service integration tests with Docker Compose",
+      "component_test": "Per-service component tests with Docker Compose",
+      "end_to_end_test": "./run-end-to-end-tests.sh"
+    },
+    "test_levels": {
+      "unit": {
+        "framework": "JUnit",
+        "scope": "Business logic, domain aggregates",
+        "mocking": "In-memory implementations of Eventuate Tram"
+      },
+      "integration": {
+        "framework": "Spring Boot Test",
+        "scope": "Service with real database",
+        "infrastructure": "Docker Compose (MySQL)"
+      },
+      "component": {
+        "framework": "Cucumber",
+        "scope": "Entire service with dependencies",
+        "infrastructure": "Docker Compose (full service + dependencies)"
+      },
+      "contract": {
+        "framework": "Spring Cloud Contract",
+        "scope": "Consumer-provider contract verification",
+        "stubs": "WireMock stubs published as artifacts"
+      },
+      "end_to_end": {
+        "scope": "Full application",
+        "location": "ftgo-end-to-end-tests"
+      }
+    },
+    "ci_cd": {
+      "ci_platform": "CircleCI",
+      "config": ".circleci/config.yml"
+    }
+  },
+  "code_quality": {
+    "maturity": "example_code",
+    "notes": [
+      "Primarily illustrates technical patterns, not production-ready business logic",
+      "Minimal documentation (refer to book)",
+      "Some TODOs and work in progress areas",
+      "PMD and other static analysis tools are commented out (TODO)"
+    ],
+    "standards": {
+      "code_style": "Standard Java conventions",
+      "package_structure": "Consistent across services (domain, messaging, web, service, main)",
+      "naming": "Domain-driven design naming"
+    }
+  },
+  "ai_agent_guidance": {
+    "backend_java_agents": {
+      "expected_structure": "Spring Boot microservices with DDD aggregates",
+      "key_patterns_to_recognize": [
+        "Service modules end with '-service'",
+        "Each service has domain/, messaging/, web/, service/ packages",
+        "Aggregates in domain/ follow DDD patterns",
+        "Controllers in web/ handle REST endpoints",
+        "Message handlers in messaging/ handle events/commands",
+        "Sagas in sagas/ orchestrate distributed transactions"
+      ],
+      "dependency_management": "Gradle with platform BOM from Eventuate",
+      "testing_approach": "Multi-level testing with test source sets",
+      "database_interaction": "JPA entities in domain/, repositories auto-generated",
+      "messaging_interaction": "Eventuate Tram abstractions, no direct Kafka calls",
+      "common_tasks": [
+        "Adding new endpoints: web/ package, controller classes",
+        "Adding business logic: domain/ package, aggregate methods",
+        "Adding message handlers: messaging/ package, handler classes",
+        "Adding saga steps: sagas/ package, saga definition DSL"
+      ]
+    },
+    "frontend_agents": {
+      "graphql_gateway": {
+        "location": "ftgo-api-gateway-graphql/",
+        "language": "TypeScript",
+        "structure": "src/ with schema.js, server.ts, service proxies",
+        "schema_definition": "GraphQL SDL in schema.js",
+        "resolvers": "Defined inline in schema.js",
+        "data_fetching": "Service proxies fetch from backend REST APIs",
+        "build": "TypeScript compilation to dist/",
+        "test": "Jest with unit and e2e test suites"
+      },
+      "rest_gateway": {
+        "location": "ftgo-api-gateway/",
+        "language": "Java",
+        "framework": "Spring Cloud Gateway (reactive)",
+        "routing": "Configured via Spring Cloud Gateway DSL",
+        "composition": "WebClient for async service calls"
+      }
+    },
+    "infrastructure_agents": {
+      "docker_compose": {
+        "main_file": "docker-compose.yml",
+        "service_startup_order": "Infrastructure services first (MySQL, Kafka, CDC), then application services",
+        "environment_variables": "Injected from gradle.properties via build.gradle",
+        "networking": "Services accessible via service names"
+      },
+      "kubernetes": {
+        "manifests": "deployment/kubernetes/",
+        "scripts": "deployment/kubernetes/scripts/",
+        "approach": "StatefulSets for stateful services, Deployments for stateless"
+      }
+    },
+    "data_agents": {
+      "mysql": {
+        "initialization": "mysql/compile-schema-per-service.sh creates schemas at startup",
+        "schema_per_service": "Each service has dedicated schema and user",
+        "eventuate_tables": "Added automatically by Eventuate frameworks",
+        "migrations": "JPA auto-DDL (not recommended for production)"
+      },
+      "dynamodb": {
+        "local_setup": "dynamodblocal/ and dynamodblocal-init/",
+        "initialization": "Tables created by init container",
+        "access": "AWS SDK with local endpoint override"
+      }
+    },
+    "messaging_agents": {
+      "kafka_topics": "Auto-created by Eventuate Tram",
+      "message_flow": "Services publish domain events, CDC service propagates to Kafka, consumers subscribe",
+      "debugging": "Kafka GUI available at port 9088",
+      "schema": "JSON messages defined in *-api modules"
+    }
+  },
+  "common_pitfalls": {
+    "memory_requirements": "Application requires significant memory (16GB recommended)",
+    "startup_time": "Multiple services take time to start, wait for all dependencies",
+    "docker_host": "May need to set DOCKER_HOST_IP if not using localhost",
+    "contract_builds": "Must run buildContracts before first build",
+    "schema_initialization": "MySQL schemas created at first startup, may need to recreate containers"
+  },
+  "useful_scripts": {
+    "build-and-test-all.sh": "Builds and tests entire application",
+    "build-and-restart-service.sh": "Rebuilds and restarts a single service",
+    "wait-for-services.sh": "Waits for all services to be healthy",
+    "show-swagger-ui-urls.sh": "Displays all Swagger UI URLs",
+    "mysql-cli.sh": "Opens MySQL CLI",
+    "scan-order-history-view.sh": "Scans DynamoDB order history table",
+    "run-end-to-end-tests.sh": "Runs full end-to-end test suite",
+    "run-graphql-api-gateway-tests.sh": "Tests GraphQL gateway"
+  },
+  "external_references": {
+    "book": "Microservices Patterns by Chris Richardson (https://microservices.io/book)",
+    "microservices_io": "https://microservices.io",
+    "eventuate": "https://eventuate.io",
+    "github": "https://github.com/microservices-patterns/ftgo-application"
+  },
+  "version_info": {
+    "last_updated": "2025",
+    "status": "Example/Reference Implementation",
+    "spring_boot_version": "2.2.6.RELEASE",
+    "java_version": "1.8",
+    "eventuate_platform": "2022.0.RELEASE"
+  }
+}

@@ -32,6 +32,10 @@ class FtgoServicePlugin implements Plugin<Project> {
             //compile "io.eventuate.tram.core:eventuate-tram-spring-cloud-sleuth-integration"
 
             implementation(platform("io.eventuate.platform:eventuate-platform-dependencies:${project.ext.eventuatePlatformVersion}"))
+
+            // Google Cloud Spanner dependencies
+            compile 'com.google.cloud:google-cloud-spanner-jdbc:2.11.3'
+            compile 'com.google.cloud:google-cloud-spanner-hibernate-dialect:2.11.3'
         }
 
     }

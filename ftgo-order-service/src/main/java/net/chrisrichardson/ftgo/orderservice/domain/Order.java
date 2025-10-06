@@ -6,7 +6,11 @@ import net.chrisrichardson.ftgo.common.Money;
 import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.orderservice.api.events.*;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
+
 import javax.persistence.*;
+import java.sql.Timestamp;
 import java.util.List;
 
 import static net.chrisrichardson.ftgo.orderservice.api.events.OrderState.APPROVED;
@@ -22,7 +26,7 @@ import static java.util.Collections.singletonList;
 public class Order {
 
   public static ResultWithDomainEvents<Order, OrderDomainEvent>
-  createOrder(long consumerId, Restaurant restaurant, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
+  createOrder(String consumerId, Restaurant restaurant, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
     Order order = new Order(consumerId, restaurant.getId(), deliveryInformation, orderLineItems);
     List<OrderDomainEvent> events = singletonList(new OrderCreatedEvent(
             new OrderDetails(consumerId, restaurant.getId(), orderLineItems,
@@ -33,8 +37,10 @@ public class Order {
   }
 
   @Id
-  @GeneratedValue
-  private Long id;
+  @GeneratedValue(generator = "uuid2")
+  @GenericGenerator(name = "uuid2", strategy = "uuid2")
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String id;
 
   @Version
   private Long version;
@@ -42,8 +48,11 @@ public class Order {
   @Enumerated(EnumType.STRING)
   private OrderState state;
 
-  private Long consumerId;
-  private Long restaurantId;
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String consumerId;
+
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String restaurantId;
 
   @Embedded
   private OrderLineItems orderLineItems;
@@ -57,10 +66,14 @@ public class Order {
   @Embedded
   private Money orderMinimum = new Money(Integer.MAX_VALUE);
 
+  @Column(nullable = false, updatable = false)
+  @CreationTimestamp
+  private Timestamp createdAt;
+
   private Order() {
   }
 
-  public Order(long consumerId, long restaurantId, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
+  public Order(String consumerId, String restaurantId, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
     this.consumerId = consumerId;
     this.restaurantId = restaurantId;
     this.deliveryInformation = deliveryInformation;
@@ -68,11 +81,11 @@ public class Order {
     this.state = APPROVAL_PENDING;
   }
 
-  public Long getId() {
+  public String getId() {
     return id;
   }
 
-  public void setId(Long id) {
+  public void setId(String id) {
     this.id = id;
   }
 
@@ -199,12 +212,12 @@ public class Order {
     return state;
   }
 
-  public long getRestaurantId() {
+  public String getRestaurantId() {
     return restaurantId;
   }
 
 
-  public Long getConsumerId() {
+  public String getConsumerId() {
     return consumerId;
   }
 }

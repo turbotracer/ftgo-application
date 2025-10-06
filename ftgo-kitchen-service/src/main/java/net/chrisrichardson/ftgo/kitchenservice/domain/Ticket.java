@@ -10,7 +10,11 @@ import net.chrisrichardson.ftgo.kitchenservice.api.events.TicketAcceptedEvent;
 import net.chrisrichardson.ftgo.kitchenservice.api.events.TicketCancelled;
 import net.chrisrichardson.ftgo.kitchenservice.api.events.TicketDomainEvent;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
+
 import javax.persistence.*;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -24,14 +28,21 @@ import static java.util.Collections.singletonList;
 public class Ticket {
 
   @Id
-  private Long id;
+  @GeneratedValue(generator = "uuid2")
+  @GenericGenerator(name = "uuid2", strategy = "uuid2")
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String id;
+
+  @Version
+  private Long version;
 
   @Enumerated(EnumType.STRING)
   private TicketState state;
 
   private TicketState previousState;
 
-  private Long restaurantId;
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String restaurantId;
 
   @ElementCollection
   @CollectionTable(name = "ticket_line_items")
@@ -43,14 +54,18 @@ public class Ticket {
   private LocalDateTime pickedUpTime;
   private LocalDateTime readyForPickupTime;
 
-  public static ResultWithDomainEvents<Ticket, TicketDomainEvent> create(long restaurantId, Long id, TicketDetails details) {
+  @Column(nullable = false, updatable = false)
+  @CreationTimestamp
+  private Timestamp createdAt;
+
+  public static ResultWithDomainEvents<Ticket, TicketDomainEvent> create(String restaurantId, String id, TicketDetails details) {
     return new ResultWithDomainEvents<>(new Ticket(restaurantId, id, details));
   }
 
   private Ticket() {
   }
 
-  public Ticket(long restaurantId, Long id, TicketDetails details) {
+  public Ticket(String restaurantId, String id, TicketDetails details) {
     this.restaurantId = restaurantId;
     this.id = id;
     this.state = TicketState.CREATE_PENDING;
@@ -149,7 +164,7 @@ public class Ticket {
     }
   }
 
-  public Long getId() {
+  public String getId() {
     return id;
   }
 

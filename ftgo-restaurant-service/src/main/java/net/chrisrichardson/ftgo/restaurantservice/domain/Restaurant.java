@@ -1,12 +1,17 @@
 package net.chrisrichardson.ftgo.restaurantservice.domain;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
+
 import javax.persistence.Access;
 import javax.persistence.AccessType;
+import javax.persistence.Column;
 import javax.persistence.Embedded;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.Table;
+import java.sql.Timestamp;
 
 @Entity
 @Table(name = "restaurants")
@@ -14,18 +19,27 @@ import javax.persistence.Table;
 public class Restaurant {
 
   @Id
-  @GeneratedValue
-  private Long id;
+  @GeneratedValue(generator = "uuid2")
+  @GenericGenerator(name = "uuid2", strategy = "uuid2")
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String id;
+
+  @Version
+  private Long version;
 
   private String name;
 
   @Embedded
   private RestaurantMenu menu;
 
+  @Column(nullable = false, updatable = false)
+  @CreationTimestamp
+  private Timestamp createdAt;
+
   private Restaurant() {
   }
 
-  public void setId(Long id) {
+  public void setId(String id) {
     this.id = id;
   }
 
@@ -44,7 +58,7 @@ public class Restaurant {
   }
 
 
-  public Long getId() {
+  public String getId() {
     return id;
   }
 

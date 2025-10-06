@@ -2,8 +2,11 @@ package net.chrisrichardson.ftgo.deliveryservice.domain;
 
 import net.chrisrichardson.ftgo.common.Address;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryState;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
 
 import javax.persistence.*;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,7 +14,13 @@ import java.time.LocalDateTime;
 public class Delivery {
 
   @Id
-  private Long id;
+  @GeneratedValue(generator = "uuid2")
+  @GenericGenerator(name = "uuid2", strategy = "uuid2")
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String id;
+
+  @Version
+  private Long version;
 
   @Embedded
   @AttributeOverrides({
@@ -27,7 +36,8 @@ public class Delivery {
   @Enumerated(EnumType.STRING)
   private DeliveryState state;
 
-  private long restaurantId;
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String restaurantId;
   private LocalDateTime pickUpTime;
 
   @Embedded
@@ -43,13 +53,18 @@ public class Delivery {
   private Address deliveryAddress;
   private LocalDateTime deliveryTime;
 
-  private Long assignedCourier;
+  @Column(columnDefinition = "VARCHAR(36)")
+  private String assignedCourier;
   private LocalDateTime readyBy;
+
+  @Column(nullable = false, updatable = false)
+  @CreationTimestamp
+  private Timestamp createdAt;
 
   private Delivery() {
   }
 
-  public Delivery(long orderId, long restaurantId, Address pickupAddress, Address deliveryAddress) {
+  public Delivery(String orderId, String restaurantId, Address pickupAddress, Address deliveryAddress) {
     this.id = orderId;
     this.pickupAddress = pickupAddress;
     this.state = DeliveryState.PENDING;
@@ -57,11 +72,11 @@ public class Delivery {
     this.deliveryAddress = deliveryAddress;
   }
 
-  public static Delivery create(long orderId, long restaurantId, Address pickupAddress, Address deliveryAddress) {
+  public static Delivery create(String orderId, String restaurantId, Address pickupAddress, Address deliveryAddress) {
     return new Delivery(orderId, restaurantId, pickupAddress, deliveryAddress);
   }
 
-  public void schedule(LocalDateTime readyBy, long assignedCourier) {
+  public void schedule(LocalDateTime readyBy, String assignedCourier) {
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;
@@ -74,11 +89,11 @@ public class Delivery {
   }
 
 
-  public long getId() {
+  public String getId() {
     return id;
   }
 
-  public long getRestaurantId() {
+  public String getRestaurantId() {
     return restaurantId;
   }
 
@@ -94,7 +109,7 @@ public class Delivery {
     return state;
   }
 
-  public Long getAssignedCourier() {
+  public String getAssignedCourier() {
     return assignedCourier;
   }
 }
