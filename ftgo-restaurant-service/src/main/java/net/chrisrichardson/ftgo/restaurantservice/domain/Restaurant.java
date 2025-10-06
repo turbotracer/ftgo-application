@@ -14,7 +14,6 @@ import javax.persistence.Table;
 public class Restaurant {
 
   @Id
-  @GeneratedValue
   private Long id;
 
   private String name;
@@ -39,6 +38,7 @@ public class Restaurant {
 
 
   public Restaurant(String name, RestaurantMenu menu) {
+    this.id = net.chrisrichardson.ftgo.common.SpannerIdGenerator.generateId();
     this.name = name;
     this.menu = menu;
   }

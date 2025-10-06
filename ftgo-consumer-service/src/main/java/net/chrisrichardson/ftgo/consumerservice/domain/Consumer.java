@@ -18,7 +18,6 @@ import javax.persistence.Table;
 public class Consumer {
 
   @Id
-  @GeneratedValue
   private Long id;
 
   @Embedded
@@ -28,6 +27,7 @@ public class Consumer {
   }
 
   public Consumer(PersonName name) {
+    this.id = net.chrisrichardson.ftgo.common.SpannerIdGenerator.generateId();
     this.name = name;
   }
 

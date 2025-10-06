@@ -33,7 +33,6 @@ public class Order {
   }
 
   @Id
-  @GeneratedValue
   private Long id;
 
   @Version
@@ -61,6 +60,7 @@ public class Order {
   }
 
   public Order(long consumerId, long restaurantId, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
+    this.id = net.chrisrichardson.ftgo.common.SpannerIdGenerator.generateId();
     this.consumerId = consumerId;
     this.restaurantId = restaurantId;
     this.deliveryInformation = deliveryInformation;
